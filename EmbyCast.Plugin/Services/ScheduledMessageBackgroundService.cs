@@ -87,6 +87,12 @@ namespace EmbyCast.Plugin.Services
         {
             var config = _getConfig();
 
+            // Dashboard's "Automatic cleanup active" toggle (PluginConfiguration.CleanupEnabled) -
+            // deliberately does NOT affect the two manual "Delete now" buttons, which call
+            // MessageStore.ExpireStaleOffline/PurgeOldHistory directly from EmbyCastApi and never
+            // go through this method at all.
+            if (!config.CleanupEnabled) return;
+
             var expired = _store.ExpireStaleOffline(config.OfflineMessageMaxAgeDays);
             if (expired > 0)
             {
