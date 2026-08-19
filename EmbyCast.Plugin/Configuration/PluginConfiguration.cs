@@ -113,6 +113,16 @@ namespace EmbyCast.Plugin.Configuration
         public bool HistoryCleanupIncludeMediaNews { get; set; } = true;
         public bool HistoryCleanupIncludeWelcome { get; set; } = true;
         public bool HistoryCleanupIncludeOffline { get; set; } = true;
+        /// <summary>Master on/off switch for the automatic daily cleanup pass (both the offline
+        /// message expiry above and the history purge above - see
+        /// ScheduledMessageBackgroundService.ProcessCleanup). Deliberately independent of the two
+        /// manual "Delete now" buttons on the dashboard, which always run regardless of this flag,
+        /// and independent of the dashboard's "Save Settings" button, which only persists the two
+        /// day fields and the six type checkboxes above - flipping this toggle saves and applies
+        /// immediately by itself. Defaults to true so upgrading installs keep the exact same
+        /// automatic-cleanup behavior they already had before this toggle existed - it's an
+        /// opt-out, not an opt-in.</summary>
+        public bool CleanupEnabled { get; set; } = true;
 
         // ---- Dashboard tile homepage ------------------------------------------
         /// <summary>Comma separated list of tile keys ("updates,instant,scheduled,timer,

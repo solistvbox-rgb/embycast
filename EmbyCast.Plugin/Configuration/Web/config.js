@@ -195,6 +195,10 @@ define(['baseView'], function (BaseView) {
             msgPurgedOffline: '{0} undelivered message(s) deleted.',
             msgPurgedHistory: '{0} history entrie(s) deleted.',
             msgNothingToPurge: 'Nothing to delete.',
+            labelEnableCleanup: 'Automatic cleanup active',
+            noteCleanupToggleIndependent: 'This switch turns the automatic daily cleanup on/off immediately by itself, separately from "Save Settings" (which only stores the fields above). The two "Delete now" buttons above always work regardless of this switch.',
+            msgCleanupEnabled: 'Automatic cleanup turned on.',
+            msgCleanupDisabled: 'Automatic cleanup turned off.',
 
             historyShowMore: 'Show more ▾',
             historyShowLess: 'Show less ▴',
@@ -390,6 +394,10 @@ define(['baseView'], function (BaseView) {
             msgPurgedOffline: '{0} nicht zugestellte Nachricht(en) gelöscht.',
             msgPurgedHistory: '{0} History-Einträge gelöscht.',
             msgNothingToPurge: 'Nichts zu löschen.',
+            labelEnableCleanup: 'Automatische Reinigung aktiv',
+            noteCleanupToggleIndependent: 'Dieser Schalter schaltet die tägliche automatische Reinigung sofort und für sich alleine ein/aus, unabhängig von "Einstellungen speichern" (das speichert nur die Felder oben). Die beiden "Jetzt löschen"-Buttons oben funktionieren unabhängig von diesem Schalter immer.',
+            msgCleanupEnabled: 'Automatische Reinigung eingeschaltet.',
+            msgCleanupDisabled: 'Automatische Reinigung ausgeschaltet.',
 
             historyShowMore: 'Mehr anzeigen ▾',
             historyShowLess: 'Weniger anzeigen ▴',
@@ -1914,6 +1922,33 @@ define(['baseView'], function (BaseView) {
             });
         });
 
+        // Deliberately separate from the ".cleanup-save" handler above: per the admin's request,
+        // flipping this switch immediately turns the automatic daily cleanup pass on/off by
+        // itself (its own save, right away), while "Save Settings" only ever persists the two day
+        // fields + six type checkboxes and never touches CleanupEnabled. The two manual "Delete
+        // now" buttons remain fully independent of this switch either way (see
+        // ScheduledMessageBackgroundService.ProcessCleanup).
+        view.querySelector('.cleanup-enabled').addEventListener('change', function () {
+            var statusEl = view.querySelector('.cleanup-status');
+            if (!pluginConfig) return;
+            var enabled = view.querySelector('.cleanup-enabled').checked;
+            pluginConfig.CleanupEnabled = enabled;
+            ApiClient.updatePluginConfiguration(PLUGIN_ID, pluginConfig).then(function (result) {
+                showStatus(statusEl, t(enabled ? 'msgCleanupEnabled' : 'msgCleanupDisabled'), 'ok');
+                if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
+                    try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
+                }
+            }, function (err) {
+                // Revert both the visible switch AND the shared pluginConfig object on failure -
+                // reverting only the checkbox would leave pluginConfig.CleanupEnabled holding the
+                // never-actually-persisted value, which the unrelated ".cleanup-save" button would
+                // then silently write out on its next click.
+                view.querySelector('.cleanup-enabled').checked = !enabled;
+                pluginConfig.CleanupEnabled = !enabled;
+                showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
+            });
+        });
+
         view.querySelector('.cleanup-purge-offline').addEventListener('click', function () {
             var statusEl = view.querySelector('.cleanup-status');
             var count = lastCleanupStats ? lastCleanupStats.OfflineQueueCount : 0;
@@ -2283,6 +2318,7 @@ define(['baseView'], function (BaseView) {
                 view.querySelector('.cleanup-type-medianews').checked = config.HistoryCleanupIncludeMediaNews !== false;
                 view.querySelector('.cleanup-type-welcome').checked = config.HistoryCleanupIncludeWelcome !== false;
                 view.querySelector('.cleanup-type-offline').checked = config.HistoryCleanupIncludeOffline !== false;
+                view.querySelector('.cleanup-enabled').checked = config.CleanupEnabled !== false;
 
                 // Media News Header/Zeitraum/Bibliotheken/Serien-Einträge/Episoden-Format are
                 // deliberately NOT restored from the saved config here. These fields are shared

@@ -205,8 +205,14 @@
       .open-order-item .oo-arrow { opacity:.4; font-size:.9em; white-space:nowrap; }
 
       .bcm-detail-header { display:flex; align-items:center; gap:.7em; margin-bottom:1.2em; }
-      .bcm-back-link { display:flex; align-items:center; gap:.4em; cursor:pointer; opacity:.7; font-size:.9em; padding:.3em .6em; border-radius:6px; }
+      /* Made larger/more prominent than the original subtle version (font-size .9em, no border,
+         only a background on hover) - the admin repeatedly mis-clicked Emby's own smaller "<"
+         page-level back arrow just above this one instead. A visible resting border + bigger
+         everything (font, padding, arrow) makes this read clearly as its own button at a glance,
+         not just as text. */
+      .bcm-back-link { display:flex; align-items:center; gap:.5em; cursor:pointer; opacity:.9; font-size:1.05em; font-weight:600; padding:.5em .9em; border-radius:8px; border:1px solid var(--bcm-border); background:var(--bcm-fill); }
       .bcm-back-link:hover { opacity:1; background:var(--bcm-fill-strong); }
+      .bcm-back-link span[aria-hidden] { font-size:1.2em; line-height:1; }
       .bcm-detail-title { font-size:1.3em; font-weight:700; margin:0; }
 
       /* Status/badge/history-tag text colors above are tuned for the dark theme (bright text on
@@ -635,7 +641,13 @@
 
         <div class="bcm-btnrow">
           <button type="button" class="bcm-btn cleanup-save" data-i18n="btnSaveCleanup">Save Settings</button>
+          <label class="bcm-switch" style="margin-left:.6em;">
+            <input type="checkbox" class="cleanup-enabled" />
+            <span class="bcm-switch-slider"></span>
+          </label>
+          <label style="margin:0;" data-i18n="labelEnableCleanup">Automatic cleanup active</label>
         </div>
+        <p class="bcm-inline-note" data-i18n="noteCleanupToggleIndependent">This switch turns the automatic daily cleanup on/off immediately by itself, separately from "Save Settings" (which only stores the fields above). The two "Delete now" buttons above always work regardless of this switch.</p>
         <div class="bcm-status cleanup-status"></div>
       </div>
       </div>
