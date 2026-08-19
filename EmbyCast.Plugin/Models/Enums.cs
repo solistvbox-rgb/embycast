@@ -20,7 +20,12 @@ namespace EmbyCast.Plugin.Models
         /// <summary>User had no active session; message queued for delivery at next login.</summary>
         Pending,
         /// <summary>Send attempt failed (and offline queueing was disabled or also failed).</summary>
-        Failed
+        Failed,
+        /// <summary>Was queued for offline delivery, but never got delivered before the
+        /// configured "Geplante Reinigung" offline-expiry deadline (Plugin.Configuration.
+        /// OfflineMessageMaxAgeDays) was reached - removed from the queue, will never be
+        /// delivered now.</summary>
+        Expired
     }
 
     /// <summary>Where a history entry originated from - purely informational, used for

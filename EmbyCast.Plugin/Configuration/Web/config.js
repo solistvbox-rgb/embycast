@@ -159,6 +159,7 @@ define(['baseView'], function (BaseView) {
             statusDelivered: 'Delivered',
             statusPending: 'Pending (offline)',
             statusFailed: 'Failed',
+            statusExpired: 'Expired',
             nowPlayingPrefix: 'Now playing: ',
             errorPrefix: 'Error: ',
 
@@ -169,7 +170,31 @@ define(['baseView'], function (BaseView) {
             typeWelcome: 'Welcome',
             typeOffline: 'Offline',
 
-            msgNoSupportedLibraries: 'No libraries with a usable content type (movies/tvshows) found.'
+            msgNoSupportedLibraries: 'No libraries with a usable content type (movies/tvshows) found.',
+
+            labelWebOnly: 'Send only to web-browser sessions',
+            webOnlyNote: 'Useful for long Media News lists, which often don\'t fit well on phone or TV apps. Users without an active web-browser session won\'t get it right away - it stays saved and is delivered automatically the next time they log in via a web browser. If it\'s still undelivered by then, it will eventually be removed automatically according to the "Scheduled Cleanup" settings below.',
+
+            cleanupTitle: 'Scheduled Cleanup',
+            cleanupDesc: 'Automatically cleans up undelivered messages and old history entries.',
+            cleanupStorageFile: 'Stored file: {0}',
+            cleanupStorageHistory: 'History: {0} entrie(s) (~{1})',
+            cleanupStorageOffline: 'Offline queue: {0} entrie(s) (~{1})',
+            cleanupOfflinePrefix: 'Offline messages are marked "Expired" and removed from the queue after',
+            cleanupOfflineSuffix: 'day(s).',
+            cleanupHistoryPrefix: 'All selected history entries below are deleted after',
+            cleanupHistorySuffix: 'day(s). Scheduled Messages and the Media News automation (weekly job) are not affected by this.',
+            cleanupTypesTitle: 'Affected message types:',
+            btnPurgeOffline: 'Delete all undelivered messages',
+            btnPurgeHistory: 'Delete history now',
+            btnSaveCleanup: 'Save Settings',
+            msgCleanupSaved: 'Cleanup settings saved.',
+            msgHistoryDaysTooLow: 'The history retention period cannot be shorter than the offline retention period ({0} day(s)).',
+            msgConfirmPurgeOffline: 'Delete all {0} currently undelivered message(s) right now? This cannot be undone.',
+            msgConfirmPurgeHistory: 'Delete all history entries matching the checked message types right now? This cannot be undone.',
+            msgPurgedOffline: '{0} undelivered message(s) deleted.',
+            msgPurgedHistory: '{0} history entrie(s) deleted.',
+            msgNothingToPurge: 'Nothing to delete.'
         },
         de: {
             pageTitle: 'EmbyCast',
@@ -313,6 +338,7 @@ define(['baseView'], function (BaseView) {
             statusDelivered: 'Zugestellt',
             statusPending: 'Ausstehend (offline)',
             statusFailed: 'Fehlgeschlagen',
+            statusExpired: 'Abgelaufen',
             nowPlayingPrefix: 'Läuft gerade: ',
             errorPrefix: 'Fehler: ',
 
@@ -323,7 +349,31 @@ define(['baseView'], function (BaseView) {
             typeWelcome: 'Willkommen',
             typeOffline: 'Offline',
 
-            msgNoSupportedLibraries: 'Keine Bibliotheken mit nutzbarem Inhaltstyp (movies/tvshows) gefunden.'
+            msgNoSupportedLibraries: 'Keine Bibliotheken mit nutzbarem Inhaltstyp (movies/tvshows) gefunden.',
+
+            labelWebOnly: 'Nur an Web-Browser-Sitzungen senden',
+            webOnlyNote: 'Sinnvoll bei langen Media-News-Listen, für die auf Handy- oder TV-Apps oft nicht genug Platz ist. Nutzer ohne aktive Web-Browser-Sitzung erhalten die Nachricht nicht sofort - sie bleibt gespeichert und wird automatisch zugestellt, sobald sie sich das nächste Mal per Web-Browser anmelden. Wird sie bis dahin nicht zugestellt, wird sie gemäß den Einstellungen unter "Geplante Reinigung" irgendwann automatisch gelöscht.',
+
+            cleanupTitle: 'Geplante Reinigung',
+            cleanupDesc: 'Räumt nicht zugestellte Nachrichten und alte Verlaufseinträge automatisch auf.',
+            cleanupStorageFile: 'Gespeicherte Datei: {0}',
+            cleanupStorageHistory: 'History: {0} Eintrag/Einträge (~{1})',
+            cleanupStorageOffline: 'Offline-Warteschlange: {0} Eintrag/Einträge (~{1})',
+            cleanupOfflinePrefix: 'Offline-Nachrichten werden nach',
+            cleanupOfflineSuffix: 'Tag(en) als "Expired" markiert und aus der Warteschlange entfernt.',
+            cleanupHistoryPrefix: 'Alle ausgewählten History-Einträge unten werden nach Ablauf von',
+            cleanupHistorySuffix: 'Tag(en) gelöscht. Scheduled Messages und Media-News-Automatik (wöchentlicher Auftrag) sind davon nicht betroffen.',
+            cleanupTypesTitle: 'Betroffene Nachrichtentypen:',
+            btnPurgeOffline: 'Alle nicht zugestellten Nachrichten löschen',
+            btnPurgeHistory: 'History sofort löschen',
+            btnSaveCleanup: 'Einstellungen speichern',
+            msgCleanupSaved: 'Einstellungen für die Reinigung gespeichert.',
+            msgHistoryDaysTooLow: 'Die History-Aufbewahrungsdauer darf nicht kürzer sein als die Offline-Aufbewahrungsdauer ({0} Tag(e)).',
+            msgConfirmPurgeOffline: 'Alle {0} aktuell nicht zugestellten Nachricht(en) jetzt löschen? Dies kann nicht rückgängig gemacht werden.',
+            msgConfirmPurgeHistory: 'Alle History-Einträge löschen, die auf die angehakten Nachrichtentypen zutreffen? Dies kann nicht rückgängig gemacht werden.',
+            msgPurgedOffline: '{0} nicht zugestellte Nachricht(en) gelöscht.',
+            msgPurgedHistory: '{0} History-Einträge gelöscht.',
+            msgNothingToPurge: 'Nichts zu löschen.'
         }
     };
 
@@ -1225,6 +1275,7 @@ define(['baseView'], function (BaseView) {
             var payload = buildMediaNewsPayload();
             payload.RecipientMode = mode;
             payload.UserIds = userIds;
+            payload.WebOnly = view.querySelector('.medianews-webonly').checked;
             ajax('POST', 'EmbyCast/MediaNews/Send', payload).then(function (result) {
                 if (result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
                 // Any Skipped outcome (no library selected, or no new media in the selected
@@ -1233,6 +1284,7 @@ define(['baseView'], function (BaseView) {
                 // here.
                 showStatus(statusEl, result.Message, result.Skipped ? 'err' : 'ok');
                 loadHistory();
+                loadCleanupStats();
             }, function (err) {
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
             });
@@ -1534,8 +1586,8 @@ define(['baseView'], function (BaseView) {
                 var badges = '';
                 keys.forEach(function (uid) {
                     var rec = deliveries[uid];
-                    var statusClass = rec.Status === 'Delivered' ? 'delivered' : (rec.Status === 'Pending' ? 'pending' : 'failed');
-                    var statusText = rec.Status === 'Delivered' ? t('statusDelivered') : (rec.Status === 'Pending' ? t('statusPending') : t('statusFailed'));
+                    var statusClass = rec.Status === 'Delivered' ? 'delivered' : (rec.Status === 'Pending' ? 'pending' : (rec.Status === 'Expired' ? 'expired' : 'failed'));
+                    var statusText = rec.Status === 'Delivered' ? t('statusDelivered') : (rec.Status === 'Pending' ? t('statusPending') : (rec.Status === 'Expired' ? t('statusExpired') : t('statusFailed')));
                     badges += '<span class="bcm-badge ' + statusClass + '" title="' + esc(statusText) + '">' + esc(rec.Username) + '</span>';
                 });
                 if (keys.length === 0) {
@@ -1579,6 +1631,106 @@ define(['baseView'], function (BaseView) {
                 var note = (result && result.CancelledOfflineCount) ? ' ' + fmt('msgOfflineCancelled', result.CancelledOfflineCount) : '';
                 showStatus(view.querySelector('.history-status'), t('msgHistoryCleared') + note, 'ok');
                 loadHistory();
+            });
+        });
+
+        // ---------------- scheduled cleanup ("Geplante Reinigung") ----------------
+
+        var lastCleanupStats = null;
+
+        function formatBytes(n) {
+            if (n == null || isNaN(n)) return '';
+            if (n < 1024) return n + ' B';
+            if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+            return (n / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function loadCleanupStats() {
+            ajax('GET', 'EmbyCast/Cleanup/Stats').then(renderCleanupStats, function () { /* non-critical, leave box as-is */ });
+        }
+
+        function renderCleanupStats(stats) {
+            lastCleanupStats = stats;
+            var el = view.querySelector('.cleanup-storage-box');
+            if (!el) return;
+            el.innerHTML =
+                '<span>' + esc(fmt('cleanupStorageFile', formatBytes(stats.TotalFileBytes))) + '</span>' +
+                '<span>' + esc(fmt('cleanupStorageHistory', stats.HistoryCount, formatBytes(stats.HistoryBytes))) + '</span>' +
+                '<span>' + esc(fmt('cleanupStorageOffline', stats.OfflineQueueCount, formatBytes(stats.OfflineQueueBytes))) + '</span>';
+        }
+
+        function getCleanupTypeCheckboxes() {
+            return {
+                IncludeInstant: view.querySelector('.cleanup-type-instant').checked,
+                IncludeScheduled: view.querySelector('.cleanup-type-scheduled').checked,
+                IncludeTimer: view.querySelector('.cleanup-type-timer').checked,
+                IncludeMediaNews: view.querySelector('.cleanup-type-medianews').checked,
+                IncludeWelcome: view.querySelector('.cleanup-type-welcome').checked,
+                IncludeOffline: view.querySelector('.cleanup-type-offline').checked
+            };
+        }
+
+        view.querySelector('.cleanup-save').addEventListener('click', function () {
+            var statusEl = view.querySelector('.cleanup-status');
+            if (!pluginConfig) return;
+
+            var offlineDays = parseInt(view.querySelector('.cleanup-offline-days').value, 10);
+            var historyDays = parseInt(view.querySelector('.cleanup-history-days').value, 10);
+            if (isNaN(offlineDays) || offlineDays < 1) offlineDays = 1;
+            if (isNaN(historyDays) || historyDays < 1) historyDays = 1;
+
+            // Field 2 (History) may never be shorter than Field 1 (Offline) - a history entry
+            // must never be purged while its offline delivery task could still be pending.
+            if (historyDays < offlineDays) {
+                view.querySelector('.cleanup-history-days').value = offlineDays;
+                historyDays = offlineDays;
+                showStatus(statusEl, fmt('msgHistoryDaysTooLow', offlineDays), 'err');
+                return;
+            }
+
+            pluginConfig.OfflineMessageMaxAgeDays = offlineDays;
+            pluginConfig.HistoryMaxAgeDays = historyDays;
+            var types = getCleanupTypeCheckboxes();
+            pluginConfig.HistoryCleanupIncludeInstant = types.IncludeInstant;
+            pluginConfig.HistoryCleanupIncludeScheduled = types.IncludeScheduled;
+            pluginConfig.HistoryCleanupIncludeTimer = types.IncludeTimer;
+            pluginConfig.HistoryCleanupIncludeMediaNews = types.IncludeMediaNews;
+            pluginConfig.HistoryCleanupIncludeWelcome = types.IncludeWelcome;
+            pluginConfig.HistoryCleanupIncludeOffline = types.IncludeOffline;
+
+            ApiClient.updatePluginConfiguration(PLUGIN_ID, pluginConfig).then(function (result) {
+                showStatus(statusEl, t('msgCleanupSaved'), 'ok');
+                if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
+                    try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
+                }
+            }, function (err) {
+                showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
+            });
+        });
+
+        view.querySelector('.cleanup-purge-offline').addEventListener('click', function () {
+            var statusEl = view.querySelector('.cleanup-status');
+            var count = lastCleanupStats ? lastCleanupStats.OfflineQueueCount : 0;
+            if (!count) { showStatus(statusEl, t('msgNothingToPurge'), 'ok'); return; }
+            if (!window.confirm(fmt('msgConfirmPurgeOffline', count))) return;
+            ajax('POST', 'EmbyCast/Cleanup/PurgeOffline').then(function (result) {
+                showStatus(statusEl, fmt('msgPurgedOffline', (result && result.Count) || 0), 'ok');
+                loadCleanupStats();
+                loadHistory();
+            }, function (err) {
+                showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
+            });
+        });
+
+        view.querySelector('.cleanup-purge-history').addEventListener('click', function () {
+            var statusEl = view.querySelector('.cleanup-status');
+            if (!window.confirm(t('msgConfirmPurgeHistory'))) return;
+            ajax('POST', 'EmbyCast/Cleanup/PurgeHistory', getCleanupTypeCheckboxes()).then(function (result) {
+                showStatus(statusEl, fmt('msgPurgedHistory', (result && result.Count) || 0), 'ok');
+                loadCleanupStats();
+                loadHistory();
+            }, function (err) {
+                showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
             });
         });
 
@@ -1627,6 +1779,15 @@ define(['baseView'], function (BaseView) {
                 view.querySelector('.welcome-header').value = localizeStoredDefault(config.WelcomeMessageHeader, 'defaultWelcomeHeader');
                 view.querySelector('.welcome-text').value = localizeStoredDefault(config.WelcomeMessageText, 'defaultWelcomeText');
 
+                view.querySelector('.cleanup-offline-days').value = config.OfflineMessageMaxAgeDays || 7;
+                view.querySelector('.cleanup-history-days').value = config.HistoryMaxAgeDays || 14;
+                view.querySelector('.cleanup-type-instant').checked = config.HistoryCleanupIncludeInstant !== false;
+                view.querySelector('.cleanup-type-scheduled').checked = config.HistoryCleanupIncludeScheduled !== false;
+                view.querySelector('.cleanup-type-timer').checked = config.HistoryCleanupIncludeTimer !== false;
+                view.querySelector('.cleanup-type-medianews').checked = config.HistoryCleanupIncludeMediaNews !== false;
+                view.querySelector('.cleanup-type-welcome').checked = config.HistoryCleanupIncludeWelcome !== false;
+                view.querySelector('.cleanup-type-offline').checked = config.HistoryCleanupIncludeOffline !== false;
+
                 // Media News Header/Zeitraum/Bibliotheken/Serien-Einträge/Episoden-Format are
                 // deliberately NOT restored from the saved config here. These fields are shared
                 // between the manual "Send Media News
@@ -1662,6 +1823,7 @@ define(['baseView'], function (BaseView) {
             loadHistory();
             refreshTimerStatus();
             refreshMediaNewsAutoStatus();
+            loadCleanupStats();
         }
 
         this.onResume = function () {
@@ -1674,6 +1836,7 @@ define(['baseView'], function (BaseView) {
             loadHistory();
             refreshTimerStatus();
             refreshMediaNewsAutoStatus();
+            loadCleanupStats();
         };
 
         this.onPause = function () {
