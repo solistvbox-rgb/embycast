@@ -194,7 +194,23 @@ define(['baseView'], function (BaseView) {
             msgConfirmPurgeHistory: 'Delete all history entries matching the checked message types right now? This cannot be undone.',
             msgPurgedOffline: '{0} undelivered message(s) deleted.',
             msgPurgedHistory: '{0} history entrie(s) deleted.',
-            msgNothingToPurge: 'Nothing to delete.'
+            msgNothingToPurge: 'Nothing to delete.',
+
+            historyShowMore: 'Show more ▾',
+            historyShowLess: 'Show less ▴',
+
+            recipientToLabel: 'To:',
+            recipientUnknownUser: 'Unknown user',
+            recipientMoreLink: '+{0} more',
+            recipientShowLess: 'show less',
+
+            backToOverview: 'Overview',
+            openOrdersTitle: 'Open items',
+            openOrdersNone: 'Nothing pending right now.',
+            openOrderTimerActive: 'Countdown active',
+            openOrderEndsIn: 'ends in {0}',
+            tileArrow: '→ {0}',
+            msgTileOrderSaved: 'Tile order saved.'
         },
         de: {
             pageTitle: 'EmbyCast',
@@ -373,7 +389,23 @@ define(['baseView'], function (BaseView) {
             msgConfirmPurgeHistory: 'Alle History-Einträge löschen, die auf die angehakten Nachrichtentypen zutreffen? Dies kann nicht rückgängig gemacht werden.',
             msgPurgedOffline: '{0} nicht zugestellte Nachricht(en) gelöscht.',
             msgPurgedHistory: '{0} History-Einträge gelöscht.',
-            msgNothingToPurge: 'Nichts zu löschen.'
+            msgNothingToPurge: 'Nichts zu löschen.',
+
+            historyShowMore: 'Mehr anzeigen ▾',
+            historyShowLess: 'Weniger anzeigen ▴',
+
+            recipientToLabel: 'An:',
+            recipientUnknownUser: 'Unbekannter User',
+            recipientMoreLink: '+{0} weitere',
+            recipientShowLess: 'weniger anzeigen',
+
+            backToOverview: 'Übersicht',
+            openOrdersTitle: 'Offene Aufträge',
+            openOrdersNone: 'Aktuell nichts Offenes.',
+            openOrderTimerActive: 'Countdown aktiv',
+            openOrderEndsIn: 'endet in {0}',
+            tileArrow: '→ {0}',
+            msgTileOrderSaved: 'Kachel-Reihenfolge gespeichert.'
         }
     };
 
@@ -651,6 +683,9 @@ define(['baseView'], function (BaseView) {
             loadHistory();
             updateTimerPreview();
             refreshMediaNewsAutoStatus();
+            renderTileGrid();
+            renderOpenOrders();
+            if (currentSection) view.querySelector('#bcmDetailTitle').textContent = t(TILE_TITLE_I18N[currentSection]);
         }
 
         view.querySelectorAll('.bcm-langbtn').forEach(function (btn) {
@@ -789,6 +824,11 @@ define(['baseView'], function (BaseView) {
                 allUsersCache = results[0] || [];
                 activeSessionsCache = results[1] || [];
                 renderRecipientLists();
+                // See the race-condition note on buildRecipientLineHtml(): if the scheduled list
+                // already rendered before user data was available, re-render it now that names
+                // can actually be resolved. No-op (lastScheduledItems still null) on the very
+                // first load if this happens to resolve before loadScheduled() ever ran.
+                if (lastScheduledItems) renderScheduled(lastScheduledItems);
             });
         }
 
@@ -851,6 +891,21 @@ define(['baseView'], function (BaseView) {
 
         view.querySelector('.update-check').addEventListener('click', checkForUpdate);
         view.querySelector('.update-install').addEventListener('click', installUpdate);
+
+        var updateAvailableFlag = false;
+
+        // Silent check driving only the Plugin-Updates tile's "update available" dot - never
+        // touches the manual Check-for-Updates button/status text above, and never surfaces an
+        // error to the admin (this runs unprompted on every page load, an admin who's offline or
+        // whose GitHub check fails shouldn't see a scary error for something they didn't ask for).
+        // Cheap to call: UpdateChecker.CheckAsync() on the server caches its GitHub response for
+        // an hour, so this doesn't add a real extra GitHub request on every page load.
+        function silentCheckForUpdateBadge() {
+            ajax('POST', 'EmbyCast/CheckUpdate').then(function (result) {
+                updateAvailableFlag = !!(result && result.UpdateAvailable);
+                renderTileBadges();
+            }, function () { /* ignore - badge just stays hidden */ });
+        }
 
         // ---------------- instant message ----------------
 
@@ -929,10 +984,16 @@ define(['baseView'], function (BaseView) {
             });
         }
 
+        // Cached so a re-render can be triggered once allUsersCache actually has data (see the
+        // race-condition note in buildRecipientLineHtml() below) without a second server round-trip.
+        var lastScheduledItems = null;
+
         function renderScheduled(items) {
+            lastScheduledItems = items || [];
             var el = view.querySelector('.scheduled-list');
             if (!items || items.length === 0) {
                 el.innerHTML = '<p style="opacity:.35;font-size:.85em;margin:0;">' + esc(t('msgNoScheduled')) + '</p>';
+                renderOpenOrders();
                 return;
             }
             el.innerHTML = '';
@@ -945,6 +1006,7 @@ define(['baseView'], function (BaseView) {
                     '<span><strong>' + esc(s.Header) + '</strong> &mdash; ' + esc(when) + '</span>' +
                     '<button class="bcm-dismiss cancel-scheduled-btn" data-id="' + esc(s.Id) + '">' + esc(t('msgCancel')) + '</button>' +
                     '</div>' +
+                    buildRecipientLineHtml(s) +
                     '<div style="font-size:.88em;opacity:.75;">' + esc(s.Text) + '</div>';
                 el.appendChild(row);
             });
@@ -952,6 +1014,80 @@ define(['baseView'], function (BaseView) {
                 btn.addEventListener('click', function () {
                     if (!window.confirm(t('msgConfirmCancelSchedule'))) return;
                     ajax('DELETE', 'EmbyCast/Schedule/' + btn.getAttribute('data-id')).then(loadScheduled);
+                });
+            });
+            wireRecipientMoreLinks(el);
+            renderOpenOrders();
+        }
+
+        // Looks up a user's display name from the shared allUsersCache; falls back to a generic
+        // "Unknown user" label for ids that no longer resolve (e.g. a user account that was since
+        // deleted from Emby but is still referenced by an already-scheduled message).
+        function resolveUserName(userId) {
+            for (var i = 0; i < allUsersCache.length; i++) {
+                if (allUsersCache[i].Id === userId) return allUsersCache[i].Name;
+            }
+            return t('recipientUnknownUser');
+        }
+
+        var RECIPIENT_NAMES_SHOWN_COLLAPSED = 4;
+
+        // Builds the "To: ..." line shown under each upcoming scheduled message. Active/All modes
+        // just show the (translated) mode label, matching how Media News already summarizes its
+        // own recipient mode. "Specific" mode lists resolved user names, truncated to the first 4
+        // with a clickable "+N more" (see wireRecipientMoreLinks) once there are more than that.
+        //
+        // Race condition note: on a fresh page load, loadScheduled() and loadUsersAndSessions()
+        // both kick off in parallel from init() - if the schedule list comes back first, names
+        // aren't resolvable yet and every "Specific" entry would show "Unknown user" for everyone.
+        // loadUsersAndSessions() re-renders the scheduled list (via lastScheduledItems, see
+        // below) once allUsersCache actually has data, so this self-corrects a moment later
+        // without a second server round-trip for the schedule itself.
+        function buildRecipientLineHtml(s) {
+            var mode = s.RecipientMode || 'All';
+            var toText;
+            if (mode === 'Specific') {
+                var ids = s.SpecificUserIds || [];
+                if (ids.length === 0) {
+                    toText = '<b>' + esc(t('recipientSpecific')) + '</b>';
+                } else {
+                    var names = ids.map(resolveUserName);
+                    var shown = names.slice(0, RECIPIENT_NAMES_SHOWN_COLLAPSED);
+                    toText = '<b class="bcm-recipient-names">' + esc(shown.join(', ')) + '</b>';
+                    if (names.length > RECIPIENT_NAMES_SHOWN_COLLAPSED) {
+                        // The remaining count is stored explicitly in data-remaining (rather than
+                        // re-derived later by splitting data-all on ', ') so a display name that
+                        // itself happens to contain ", " can never throw the count off.
+                        toText += ' <span class="bcm-recipient-more" data-all="' + esc(names.join(', ')) + '" ' +
+                            'data-collapsed="' + esc(shown.join(', ')) + '" data-expanded="0" ' +
+                            'data-remaining="' + (names.length - RECIPIENT_NAMES_SHOWN_COLLAPSED) + '">' +
+                            esc(fmt('recipientMoreLink', names.length - RECIPIENT_NAMES_SHOWN_COLLAPSED)) + '</span>';
+                    }
+                }
+            } else {
+                toText = '<b>' + esc(mode === 'Active' ? t('recipientActive') : t('recipientAll')) + '</b>';
+            }
+            return '<div class="bcm-recipient-line">' + esc(t('recipientToLabel')) + ' ' + toText + '</div>';
+        }
+
+        // Wires up the "+N more"/"show less" toggle for truncated "Selected users" recipient
+        // lines - swaps the visible name list and the link's own label between the two states,
+        // entirely client-side (no re-fetch needed, the full name list is already in the DOM via
+        // data-all/data-collapsed).
+        function wireRecipientMoreLinks(container) {
+            container.querySelectorAll('.bcm-recipient-more').forEach(function (link) {
+                link.addEventListener('click', function () {
+                    var namesEl = this.previousElementSibling;
+                    var expanded = this.getAttribute('data-expanded') === '1';
+                    if (expanded) {
+                        namesEl.textContent = this.getAttribute('data-collapsed');
+                        this.textContent = fmt('recipientMoreLink', this.getAttribute('data-remaining'));
+                        this.setAttribute('data-expanded', '0');
+                    } else {
+                        namesEl.textContent = this.getAttribute('data-all');
+                        this.textContent = t('recipientShowLess');
+                        this.setAttribute('data-expanded', '1');
+                    }
                 });
             });
         }
@@ -1088,32 +1224,59 @@ define(['baseView'], function (BaseView) {
             });
         });
 
+        var lastTimerStatus = null;
+
+        // Shared by the Timer card's own countdown text and the tile grid's countdown badge (see
+        // renderTileBadges()), so both always agree and a tile reorder (which recreates the tile
+        // grid's DOM, see renderTileGrid()) can immediately paint the current value instead of
+        // showing a stale "--:--:--" placeholder until the next 1s poll tick.
+        function formatHms(totalSeconds) {
+            var remaining = Math.max(0, totalSeconds || 0);
+            var h = Math.floor(remaining / 3600);
+            var m = Math.floor((remaining % 3600) / 60);
+            var s = remaining % 60;
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            return pad(h) + ':' + pad(m) + ':' + pad(s);
+        }
+
         function refreshTimerStatus() {
             ajax('GET', 'EmbyCast/Timer/Status').then(function (status) {
+                lastTimerStatus = (status && status.Active) ? status : null;
                 var visual = view.querySelector('.timer-visual');
                 if (!status || !status.Active) {
                     visual.style.display = 'none';
                     stopTimerPolling();
+                    renderTileBadges();
+                    renderOpenOrders();
                     return;
                 }
                 visual.style.display = 'block';
                 var remaining = Math.max(0, status.SecondsRemaining || 0);
-                var h = Math.floor(remaining / 3600);
-                var m = Math.floor((remaining % 3600) / 60);
-                var s = remaining % 60;
-                var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-                view.querySelector('.timer-countdown-text').textContent = pad(h) + ':' + pad(m) + ':' + pad(s);
+                var text = formatHms(remaining);
+                view.querySelector('.timer-countdown-text').textContent = text;
 
                 var totalSeconds = (new Date(status.EndUtc) - new Date(status.StartUtc)) / 1000;
                 var elapsedRatio = totalSeconds > 0 ? (1 - remaining / totalSeconds) : 0;
                 view.querySelector('.bcm-countdown-bar-fill').style.width = Math.min(100, Math.max(0, elapsedRatio * 100)) + '%';
+
+                // Pre-existing gap fixed here: previously, an active timer's polling only ever
+                // started from the "Start Timer" button click - a page reload (or first init())
+                // while a timer was already running left this countdown showing a static,
+                // non-ticking snapshot until the admin next interacted with the Start button. Since
+                // this function itself now knows the timer is Active, it can just resume polling on
+                // its own if nothing is polling yet. startTimerPolling() calls this function
+                // immediately and THEN sets the interval, so this guard (not startTimerPolling
+                // itself) is what actually breaks the recursion.
+                if (!timerPollHandle) { timerPollHandle = window.setInterval(refreshTimerStatus, 1000); }
+
+                renderTileBadges();
+                renderOpenOrders();
             }, function () { stopTimerPolling(); });
         }
 
         function startTimerPolling() {
             stopTimerPolling();
             refreshTimerStatus();
-            timerPollHandle = window.setInterval(refreshTimerStatus, 1000);
         }
         function stopTimerPolling() {
             if (timerPollHandle) { window.clearInterval(timerPollHandle); timerPollHandle = null; }
@@ -1604,7 +1767,10 @@ define(['baseView'], function (BaseView) {
                     '<strong>' + esc(h.Header) + '</strong></span>' +
                     '<span style="font-size:.75em;opacity:.4;">' + esc(timeAgo(h.CreatedAtUtc)) + '</span>' +
                     '</div>' +
-                    '<div style="font-size:.88em;opacity:.75;margin-bottom:.5em;white-space:pre-line;">' + esc(h.Text) + '</div>' +
+                    // Starts collapsed by default (per measureHistoryCollapse() below); the toggle
+                    // link is only added to the DOM for entries that actually overflow the
+                    // collapsed height, so a short entry never shows a pointless "Show more" link.
+                    '<div class="bcm-history-text collapsed">' + esc(h.Text) + '</div>' +
                     '<div style="margin-bottom:.5em;">' + badges + '</div>' +
                     '<button class="bcm-dismiss dismiss-history-btn">' + esc(t('msgDismiss')) + '</button>';
                 // Dismissing now also cancels any still-pending offline deliveries for this entry
@@ -1621,6 +1787,46 @@ define(['baseView'], function (BaseView) {
                 });
                 el.appendChild(row);
             });
+            measureHistoryCollapse();
+        }
+
+        // Decides, per entry, whether the collapsed height actually clips any content - if so,
+        // keeps the 'collapsed' class and adds a "Show more" toggle link; otherwise removes the
+        // class so short entries render exactly as before, with no link at all.
+        //
+        // Under the tile-navigation layout, the "Status & History" card lives inside a
+        // .bcm-section that defaults to display:none, and loadHistory()/renderHistory() still run
+        // during init() regardless of which tile is open. A hidden (display:none) element always
+        // reports scrollHeight/clientHeight as 0, so measuring right after render would wrongly
+        // treat every entry as "fits, no link needed" while History isn't the open section. To
+        // avoid that, this skips elements that are still hidden (offsetParent === null) - openSection()
+        // calls this again once History becomes visible, which is when hidden entries actually get
+        // measured and (if needed) their toggle link added.
+        function measureHistoryCollapse() {
+            var els = view.querySelectorAll('.bcm-history-text');
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i];
+                if (el.offsetParent === null) continue; // still hidden - measure later, see above
+                if (el._bcmMeasured) continue; // already decided once while visible - don't redo
+                el._bcmMeasured = true;
+                // scrollHeight reflects the FULL content height regardless of the collapsed
+                // class's max-height/overflow:hidden, so this comparison is valid even with
+                // 'collapsed' already applied - no need to remove it first to measure.
+                var overflows = el.scrollHeight > el.clientHeight + 2; // +2px rounding slack
+                if (!overflows) {
+                    el.classList.remove('collapsed');
+                    continue;
+                }
+                var link = document.createElement('span');
+                link.className = 'bcm-history-expand';
+                link.textContent = t('historyShowMore');
+                link.addEventListener('click', function () {
+                    var textEl = this.previousElementSibling;
+                    var collapsed = textEl.classList.toggle('collapsed');
+                    this.textContent = collapsed ? t('historyShowMore') : t('historyShowLess');
+                });
+                el.parentNode.insertBefore(link, el.nextSibling);
+            }
         }
 
         view.querySelector('.history-refresh').addEventListener('click', loadHistory);
@@ -1734,6 +1940,274 @@ define(['baseView'], function (BaseView) {
             });
         });
 
+        // ---------------- tile homepage ----------------
+
+        // Order matches the previous top-to-bottom card layout, used as the default (and as the
+        // fallback for any key missing from a saved TileOrderCsv - see parseTileOrder()).
+        var TILE_KEYS = ['updates', 'instant', 'scheduled', 'timer', 'medianews', 'welcome', 'history', 'cleanup'];
+        var TILE_ICON_KEYS = {
+            updates: 'refresh', instant: 'message', scheduled: 'calendar', timer: 'server',
+            medianews: 'speaker', welcome: 'door', history: 'history', cleanup: 'trash'
+        };
+        var TILE_TITLE_I18N = {
+            updates: 'updatesTitle', instant: 'instantTitle', scheduled: 'scheduledTitle', timer: 'timerTitle',
+            medianews: 'mediaNewsTitle', welcome: 'welcomeTitle', history: 'historyTitle', cleanup: 'cleanupTitle'
+        };
+        // Tabler Icons (outline set, MIT licensed), inlined so no extra network request is needed
+        // to render the tile grid.
+        var ICONS = {
+            refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>',
+            message: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l1.3 -3.9c-2.324 -3.437 -1.426 -7.872 2.1 -10.374c3.526 -2.501 8.59 -2.296 11.845 .48c3.255 2.777 3.695 7.266 1.029 10.501c-2.666 3.235 -7.615 4.215 -11.574 2.293l-4.7 1" /></svg>',
+            calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11.795 21h-6.795a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4" /><path d="M14 18a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M15 3v4" /><path d="M7 3v4" /><path d="M3 11h16" /><path d="M18 16.496v1.504l1 1" /></svg>',
+            server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-2" /><path d="M12 20h-6a3 3 0 0 1 -3 -3v-2a3 3 0 0 1 3 -3h10.5" /><path d="M16 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M18 14.5v1.5" /><path d="M18 20v1.5" /><path d="M21.032 16.25l-1.299 .75" /><path d="M16.27 19l-1.3 .75" /><path d="M14.97 16.25l1.3 .75" /><path d="M19.733 19l1.3 .75" /><path d="M7 8v.01" /><path d="M7 16v.01" /></svg>',
+            speaker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a3 3 0 0 1 0 6" /><path d="M10 8v11a1 1 0 0 1 -1 1h-1a1 1 0 0 1 -1 -1v-5" /><path d="M12 8l4.524 -3.77a.9 .9 0 0 1 1.476 .692v12.156a.9 .9 0 0 1 -1.476 .692l-4.524 -3.77h-8a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h8" /></svg>',
+            door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 12v.01" /><path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h6m4 10.5v7.5" /><path d="M21 7h-7m3 -3l-3 3l3 3" /></svg>',
+            history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8l0 4l2 2" /><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5" /></svg>',
+            trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>'
+        };
+
+        var tileOrder = TILE_KEYS.slice(); // current display order; mutated by drag & drop
+        var currentSection = null; // null = grid view is showing
+        var dragKey = null;
+
+        // Drops any key not in TILE_KEYS (e.g. from a future downgrade, or hand-edited XML) and
+        // appends any known key missing from the CSV (e.g. a tile added by a later plugin update)
+        // at the end - so existing installs always see every tile at least once, in a sane place,
+        // without needing a fresh default.
+        function parseTileOrder(csv) {
+            if (!csv) return TILE_KEYS.slice();
+            var seen = {};
+            var parsed = csv.split(',').map(function (s) { return s.trim(); })
+                .filter(function (k) { return TILE_KEYS.indexOf(k) !== -1 && !seen[k] && (seen[k] = true); });
+            TILE_KEYS.forEach(function (k) { if (parsed.indexOf(k) === -1) parsed.push(k); });
+            return parsed;
+        }
+
+        function saveTileOrder() {
+            if (!pluginConfig) return;
+            pluginConfig.TileOrderCsv = tileOrder.join(',');
+            ApiClient.updatePluginConfiguration(PLUGIN_ID, pluginConfig).then(function (result) {
+                if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
+                    try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
+                }
+                showStatus(view.querySelector('#tileOrderStatus'), t('msgTileOrderSaved'), 'ok');
+            }, function () { /* non-critical - the new order still applies to this page instance */ });
+        }
+
+        function wireTileDragHandlers(tile) {
+            tile.addEventListener('dragstart', function (e) {
+                dragKey = tile.getAttribute('data-key');
+                tile._bcmSuppressClick = true;
+                tile.classList.add('dragging');
+                try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragKey); } catch (ex) { /* ignore */ }
+            });
+            tile.addEventListener('dragend', function () {
+                tile.classList.remove('dragging');
+                view.querySelectorAll('.tile.drag-over').forEach(function (el) { el.classList.remove('drag-over'); });
+                dragKey = null;
+                // dragend always fires at the end of every drag gesture, whether or not it ended
+                // in a valid drop (e.g. dropped back on itself, or outside any tile) - clearing
+                // the suppress-next-click flag here too (in addition to the click handler itself
+                // consuming it) guarantees it never survives past the gesture that set it, so an
+                // aborted drag can never leave this tile's next real click silently swallowed.
+                tile._bcmSuppressClick = false;
+            });
+            tile.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                try { e.dataTransfer.dropEffect = 'move'; } catch (ex) { /* ignore */ }
+                tile.classList.add('drag-over');
+            });
+            tile.addEventListener('dragleave', function () { tile.classList.remove('drag-over'); });
+            tile.addEventListener('drop', function (e) {
+                e.preventDefault();
+                tile.classList.remove('drag-over');
+                var targetKey = tile.getAttribute('data-key');
+                if (!dragKey || dragKey === targetKey) return;
+                var from = tileOrder.indexOf(dragKey);
+                var to = tileOrder.indexOf(targetKey);
+                if (from === -1 || to === -1) return;
+                tileOrder.splice(from, 1);
+                tileOrder.splice(to, 0, dragKey);
+                renderTileGrid();
+                saveTileOrder();
+            });
+        }
+
+        function renderTileGrid() {
+            var grid = view.querySelector('#tileGrid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            tileOrder.forEach(function (key) {
+                var tile = document.createElement('div');
+                tile.className = 'tile c-' + key;
+                tile.setAttribute('draggable', 'true');
+                tile.setAttribute('data-key', key);
+
+                var iconSpan = document.createElement('span');
+                iconSpan.className = 'tile-icon';
+                iconSpan.innerHTML = ICONS[TILE_ICON_KEYS[key]] || '';
+                tile.appendChild(iconSpan);
+
+                var labelSpan = document.createElement('span');
+                labelSpan.className = 'tile-label';
+                labelSpan.textContent = t(TILE_TITLE_I18N[key]);
+                tile.appendChild(labelSpan);
+
+                if (key === 'timer') {
+                    var cd = document.createElement('span');
+                    cd.className = 'tile-countdown';
+                    cd.style.display = 'none';
+                    cd.innerHTML = '<span class="pulse-dot"></span><span id="tileCountdownText">--:--:--</span>';
+                    tile.appendChild(cd);
+                }
+
+                tile.addEventListener('click', function () {
+                    // A drag operation ends with a 'click' firing on the drop target in some
+                    // browsers - suppress exactly that one synthetic click so dropping a tile
+                    // doesn't also immediately navigate into it.
+                    if (tile._bcmSuppressClick) { tile._bcmSuppressClick = false; return; }
+                    openSection(key);
+                });
+                wireTileDragHandlers(tile);
+                grid.appendChild(tile);
+            });
+            renderTileBadges();
+        }
+
+        function setTileBadge(key, opts) {
+            var grid = view.querySelector('#tileGrid');
+            if (!grid) return;
+            var tile = grid.querySelector('.tile[data-key="' + key + '"]');
+            if (!tile) return;
+            var existing = tile.querySelector('.tile-badge');
+            if (existing) existing.parentNode.removeChild(existing);
+            if (!opts) return;
+            var badge = document.createElement('span');
+            badge.className = 'tile-badge' + (opts.dot ? ' dot' : '');
+            if (!opts.dot) badge.textContent = opts.text;
+            tile.insertBefore(badge, tile.firstChild);
+        }
+
+        // Badge data all comes from state already loaded for other purposes (updateAvailableFlag
+        // from the silent update check, lastScheduledItems from the Scheduled Message list,
+        // lastTimerStatus from the timer poll) - no dedicated endpoint/request needed just for
+        // the tile grid.
+        function renderTileBadges() {
+            var grid = view.querySelector('#tileGrid');
+            if (!grid) return;
+            setTileBadge('updates', updateAvailableFlag ? { dot: true } : null);
+            var count = (lastScheduledItems || []).length;
+            setTileBadge('scheduled', count > 0 ? { text: String(count) } : null);
+            var countdownEl = grid.querySelector('.tile[data-key="timer"] .tile-countdown');
+            if (countdownEl) {
+                countdownEl.style.display = lastTimerStatus ? 'flex' : 'none';
+                if (lastTimerStatus) {
+                    // Paint the current value immediately (using formatHms(), the same helper
+                    // refreshTimerStatus() uses) rather than leaving the "--:--:--" placeholder
+                    // showing until the next 1s poll tick - matters right after a tile reorder,
+                    // since renderTileGrid() rebuilds this element from scratch.
+                    var textEl = countdownEl.querySelector('#tileCountdownText');
+                    if (textEl) textEl.textContent = formatHms(lastTimerStatus.SecondsRemaining);
+                }
+            }
+        }
+
+        function formatDurationShort(totalSeconds) {
+            totalSeconds = Math.max(0, totalSeconds || 0);
+            var h = Math.floor(totalSeconds / 3600);
+            var m = Math.floor((totalSeconds % 3600) / 60);
+            var s = totalSeconds % 60;
+            if (h > 0) return h + 'h ' + m + 'm';
+            if (m > 0) return m + 'm ' + s + 's';
+            return s + 's';
+        }
+
+        // Plain-text (not HTML) equivalent of buildRecipientLineHtml(), for the "Offene
+        // Aufträge" list below the tile grid.
+        function recipientSummaryText(s) {
+            var mode = s.RecipientMode || 'All';
+            if (mode === 'Specific') {
+                var ids = s.SpecificUserIds || [];
+                if (ids.length === 0) return t('recipientSpecific');
+                var names = ids.map(resolveUserName);
+                if (names.length > RECIPIENT_NAMES_SHOWN_COLLAPSED) {
+                    return names.slice(0, RECIPIENT_NAMES_SHOWN_COLLAPSED).join(', ') + ' ' +
+                        fmt('recipientMoreLink', names.length - RECIPIENT_NAMES_SHOWN_COLLAPSED);
+                }
+                return names.join(', ');
+            }
+            return mode === 'Active' ? t('recipientActive') : t('recipientAll');
+        }
+
+        // "Offene Aufträge": not-yet-sent Scheduled Messages plus an active Timer/Countdown, if
+        // any - deliberately excludes the Media News weekly auto-send job (confirmed with the
+        // admin: that job isn't considered an "open item" the way a one-off scheduled message or
+        // a running countdown is).
+        function renderOpenOrders() {
+            var el = view.querySelector('#openOrdersList');
+            if (!el) return;
+            var items = [];
+            (lastScheduledItems || []).forEach(function (s) {
+                items.push({
+                    title: s.Header,
+                    sub: new Date(s.SendAtUtc).toLocaleString() + ' · ' + recipientSummaryText(s),
+                    targetKey: 'scheduled'
+                });
+            });
+            if (lastTimerStatus) {
+                items.push({
+                    title: t('openOrderTimerActive'),
+                    sub: fmt('openOrderEndsIn', formatDurationShort(lastTimerStatus.SecondsRemaining)),
+                    targetKey: 'timer'
+                });
+            }
+            if (items.length === 0) {
+                el.innerHTML = '<p style="opacity:.35;font-size:.85em;margin:0;">' + esc(t('openOrdersNone')) + '</p>';
+                return;
+            }
+            el.innerHTML = '';
+            items.forEach(function (item) {
+                var row = document.createElement('div');
+                row.className = 'open-order-item';
+                row.innerHTML =
+                    '<div class="oo-main"><span class="oo-title"></span><span class="oo-sub"></span></div>' +
+                    '<span class="oo-arrow"></span>';
+                row.querySelector('.oo-title').textContent = item.title;
+                row.querySelector('.oo-sub').textContent = item.sub;
+                row.querySelector('.oo-arrow').textContent = fmt('tileArrow', t(TILE_TITLE_I18N[item.targetKey]));
+                row.addEventListener('click', function () { openSection(item.targetKey); });
+                el.appendChild(row);
+            });
+        }
+
+        function openSection(key) {
+            if (TILE_KEYS.indexOf(key) === -1) return;
+            currentSection = key;
+            view.querySelector('#tileGridView').style.display = 'none';
+            view.querySelectorAll('.bcm-section').forEach(function (sec) {
+                sec.style.display = (sec.getAttribute('data-section') === key) ? '' : 'none';
+            });
+            view.querySelector('#bcmDetailHeader').style.display = 'flex';
+            view.querySelector('#bcmDetailTitle').textContent = t(TILE_TITLE_I18N[key]);
+            window.scrollTo(0, 0);
+            // Only History needs a post-open hook right now: its Expand/Collapse measurement
+            // (see measureHistoryCollapse()) can't run correctly while the section was still
+            // display:none, so re-run it now that it's actually visible.
+            if (key === 'history') measureHistoryCollapse();
+        }
+
+        function showGrid() {
+            currentSection = null;
+            view.querySelector('#tileGridView').style.display = '';
+            view.querySelectorAll('.bcm-section').forEach(function (sec) { sec.style.display = 'none'; });
+            view.querySelector('#bcmDetailHeader').style.display = 'none';
+            renderTileBadges();
+            renderOpenOrders();
+        }
+
+        var backLinkEl = view.querySelector('#bcmBackLink');
+        if (backLinkEl) backLinkEl.addEventListener('click', showGrid);
+
         // ---------------- init ----------------
 
         function init() {
@@ -1755,9 +2229,15 @@ define(['baseView'], function (BaseView) {
             // set their real (localized) "show" label up front so they're correct before the
             // admin's first click, rather than only updating on toggle.
             relabelStaticPreviewButtons();
+            // Render the tile grid immediately with the default order, so the homepage has
+            // content right away instead of waiting on the config round-trip below; re-rendered
+            // again once the admin's saved TileOrderCsv (if any) comes back.
+            renderTileGrid();
 
             ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (config) {
                 pluginConfig = config;
+                tileOrder = parseTileOrder(config.TileOrderCsv);
+                renderTileGrid();
                 if (!window.localStorage || !window.localStorage.getItem(LANG_STORAGE_KEY)) {
                     var configLang = config.Language === 'de' ? 'de' : 'en';
                     if (configLang !== currentLang) {
@@ -1824,6 +2304,11 @@ define(['baseView'], function (BaseView) {
             refreshTimerStatus();
             refreshMediaNewsAutoStatus();
             loadCleanupStats();
+            // Silent - only drives the Plugin-Updates tile's dot badge, see
+            // silentCheckForUpdateBadge() above. Cheap: the server-side check result is cached
+            // for an hour (UpdateChecker.CacheTtl), so this doesn't add a real extra GitHub
+            // request on every page load.
+            silentCheckForUpdateBadge();
         }
 
         this.onResume = function () {
@@ -1837,6 +2322,8 @@ define(['baseView'], function (BaseView) {
             refreshTimerStatus();
             refreshMediaNewsAutoStatus();
             loadCleanupStats();
+            renderTileBadges();
+            renderOpenOrders();
         };
 
         this.onPause = function () {
