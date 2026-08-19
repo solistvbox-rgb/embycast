@@ -2022,12 +2022,28 @@ define(['baseView'], function (BaseView) {
                 e.preventDefault();
                 tile.classList.remove('drag-over');
                 var targetKey = tile.getAttribute('data-key');
-                if (!dragKey || dragKey === targetKey) return;
-                var from = tileOrder.indexOf(dragKey);
+                // Prefer the key carried by the native drag payload (e.dataTransfer) over the
+                // closure `dragKey` variable. Confirmed via live debugging (Chrome DevTools,
+                // 2026-08) that some environments fire an extra, premature 'dragend' event right
+                // after 'dragstart' - before the real 'drop' ever happens. Since the dragend
+                // handler below resets dragKey to null, that spurious early dragend was wiping
+                // dragKey before this drop handler ever ran, silently aborting every reorder even
+                // though the drop itself landed correctly. e.dataTransfer isn't affected by that
+                // spurious dragend (it's tied to the native drag session, not our own event
+                // handlers) and reliably still holds the value set in dragstart's setData() call -
+                // dragKey is kept only as a fallback for the unlikely case dataTransfer access
+                // itself fails.
+                var draggedKey = dragKey;
+                try {
+                    var fromTransfer = e.dataTransfer && e.dataTransfer.getData('text/plain');
+                    if (fromTransfer) draggedKey = fromTransfer;
+                } catch (ex) { /* ignore */ }
+                if (!draggedKey || draggedKey === targetKey) return;
+                var from = tileOrder.indexOf(draggedKey);
                 var to = tileOrder.indexOf(targetKey);
                 if (from === -1 || to === -1) return;
                 tileOrder.splice(from, 1);
-                tileOrder.splice(to, 0, dragKey);
+                tileOrder.splice(to, 0, draggedKey);
                 renderTileGrid();
                 saveTileOrder();
             });
