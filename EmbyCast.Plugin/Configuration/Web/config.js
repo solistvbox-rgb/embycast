@@ -525,6 +525,23 @@ define(['baseView'], function (BaseView) {
             updateTimerPreview();
         }
 
+        // Unlike updateTimerTextForAction() above (which only overwrites .timer-text if it's
+        // still showing a default, so a custom message an admin is mid-typing isn't clobbered by
+        // just picking a different post-action from the dropdown), this always resets it - used
+        // after a timer has actually been started, mirroring how Instant Message/Scheduled
+        // Message already clear their text field unconditionally once it's been sent. "None" has
+        // no default text of its own (see isTimerTextDefault/TIMER_TEXT_DEFAULT_KEYS above), so
+        // it resets to empty rather than leaving the just-used message behind.
+        function resetTimerTextToDefault(action) {
+            var el = view.querySelector('.timer-text');
+            if (!el) return;
+            if (action === 'ShutdownServer') el.value = t('defaultTimerTextShutdown');
+            else if (action === 'MaintenanceMode') el.value = t('defaultTimerTextMaintenance');
+            else if (action === 'RestartServer') el.value = t('defaultTimerText');
+            else el.value = '';
+            updateTimerPreview();
+        }
+
         // Swaps each field's value from the "fromLang" default to the "toLang" default, but
         // only if the field is still showing a default (empty, or exactly the fromLang text) -
         // anything the admin actually typed is left untouched.
@@ -663,6 +680,20 @@ define(['baseView'], function (BaseView) {
             return checked ? checked.value : 'Active';
         }
 
+        // Used after a successful send/schedule/timer-start to put the recipient picker back to
+        // its original default mode. Dispatches a real 'change' event (setting .checked alone
+        // doesn't fire one) so the existing wireRecipientGroup() listener runs too - that's what
+        // actually hides the "Selected users" list again and clears any checked users, instead of
+        // duplicating that logic here.
+        function resetRecipientGroup(prefix, defaultValue) {
+            var group = view.querySelector('.' + prefix + '-recipient-group');
+            if (!group) return;
+            var radio = group.querySelector('input[type=radio][value="' + defaultValue + '"]');
+            if (!radio) return;
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+        }
+
         function getSelectedUserIds(prefix) {
             var list = view.querySelector('.' + prefix + '-userlist');
             if (!list) return [];
@@ -795,7 +826,10 @@ define(['baseView'], function (BaseView) {
                 btn.disabled = false;
                 if (result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
                 showStatus(statusEl, fmt('msgSent', result.Delivered, result.Pending, result.Failed), 'ok');
+                view.querySelector('.instant-header').value = t('defaultInstantHeader');
                 view.querySelector('.instant-text').value = '';
+                view.querySelector('.instant-timeout').value = 0;
+                resetRecipientGroup('instant', 'Active');
                 loadHistory();
             }, function (err) {
                 btn.disabled = false;
@@ -827,7 +861,11 @@ define(['baseView'], function (BaseView) {
                 SendAtUtc: sendAt.toISOString(), RecipientMode: mode, UserIds: userIds
             }).then(function () {
                 showStatus(statusEl, t('msgScheduleCreated'), 'ok');
+                view.querySelector('.scheduled-header').value = t('defaultScheduledHeader');
                 view.querySelector('.scheduled-text').value = '';
+                view.querySelector('.scheduled-timeout').value = 0;
+                view.querySelector('.scheduled-datetime').value = '';
+                resetRecipientGroup('scheduled', 'All');
                 loadScheduled();
             }, function (err) {
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
@@ -977,6 +1015,15 @@ define(['baseView'], function (BaseView) {
                 RecipientMode: mode, UserIds: userIds, TimeoutMs: timeoutSec * 1000
             }).then(function () {
                 showStatus(statusEl, t('msgTimerStarted'), 'ok');
+                view.querySelector('.timer-header').value = t('defaultTimerHeader');
+                resetTimerTextToDefault(postAction);
+                view.querySelector('.timer-total').value = 60;
+                view.querySelector('.timer-timeout').value = 10;
+                enabledPresets = DEFAULT_PRESETS.slice();
+                view.querySelector('.timer-preset-custom').value = '';
+                renderPresetChips();
+                resetRecipientGroup('timer', 'Active');
+                updateTimerPreview();
                 startTimerPolling();
             }, function (err) {
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
