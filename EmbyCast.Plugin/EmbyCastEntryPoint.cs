@@ -64,20 +64,13 @@ namespace EmbyCast.Plugin
                 _logger.Warn("EmbyCast: ISessionManager not available; offline delivery and welcome messages are disabled.");
             }
 
-            // Purge any offline messages that have been waiting too long for a user who never
-            // logged back in, so the queue doesn't grow forever.
-            try
-            {
-                var purged = plugin.Store.PurgeStaleOffline(plugin.Configuration.OfflineMessageMaxAgeDays);
-                if (purged > 0) _logger.Info("EmbyCast: purged {0} stale offline message(s).", purged);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn("EmbyCast: offline queue purge failed: {0}", ex.Message);
-            }
-
+            // Offline-queue expiry and history cleanup ("Geplante Reinigung") now run
+            // periodically from within ScheduledMessageBackgroundService's own loop instead of
+            // once here at startup, so a long-running server without a restart still gets
+            // cleaned up on schedule.
             _scheduledCts = new CancellationTokenSource();
-            var scheduledService = new ScheduledMessageBackgroundService(plugin.Delivery, plugin.Store, _logManager);
+            var scheduledService = new ScheduledMessageBackgroundService(
+                plugin.Delivery, plugin.Store, _logManager, () => plugin.Configuration);
             _ = Task.Run(() => scheduledService.RunLoopAsync(_scheduledCts.Token), _scheduledCts.Token);
 
             _mediaNewsCts = new CancellationTokenSource();
@@ -110,7 +103,8 @@ namespace EmbyCast.Plugin
                 // Give the client UI a moment to finish initializing before pushing a popup.
                 await Task.Delay(8000).ConfigureAwait(false);
 
-                await plugin.Delivery.DeliverOfflineQueueForUserAsync(userId, session.UserName, session.Id).ConfigureAwait(false);
+                var isWebSession = DeliveryService.IsWebSession(session);
+                await plugin.Delivery.DeliverOfflineQueueForUserAsync(userId, session.UserName, session.Id, isWebSession).ConfigureAwait(false);
 
                 var config = plugin.Configuration;
                 if (config.WelcomeMessageEnabled && !plugin.Store.HasWelcomed(userId))

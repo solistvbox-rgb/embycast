@@ -46,8 +46,11 @@ namespace EmbyCast.Plugin.Models
         public string HistoryEntryId { get; set; }
     }
 
-    /// <summary>A message queued for a specific user because they were offline at send time.
-    /// Delivered by SessionEventListener the next time that user's session starts.</summary>
+    /// <summary>A message queued for a specific user because they were offline (or, if
+    /// <see cref="WebOnly"/>, had no active web-browser session) at send time. Delivered by
+    /// SessionEventListener the next time that user's session starts - immediately if
+    /// <see cref="WebOnly"/> is false, otherwise only once that next session is itself a
+    /// web-browser session (see DeliveryService.IsWebSession).</summary>
     public class OfflineMessageRecord
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -57,6 +60,25 @@ namespace EmbyCast.Plugin.Models
         public string Text { get; set; }
         public int TimeoutMs { get; set; }
         public DateTime QueuedAtUtc { get; set; } = DateTime.UtcNow;
+        /// <summary>True if this message may only be delivered to a web-browser session (the
+        /// "Nur an Web-Browser-Sitzungen senden" option, currently offered only for Media
+        /// News). A login via a non-web client leaves the message queued rather than
+        /// delivering it - see MessageStore.TakePendingForUser.</summary>
+        public bool WebOnly { get; set; }
+    }
+
+    /// <summary>Point-in-time size breakdown of the persisted store file, for the "Geplante
+    /// Reinigung" dashboard card - lets the admin see how much of the file the automatic
+    /// cleanup would actually affect, rather than just the total file size (which also
+    /// includes data cleanup never touches, e.g. the active timer or already-fired scheduled
+    /// messages).</summary>
+    public class StorageStats
+    {
+        public long TotalFileBytes { get; set; }
+        public int HistoryCount { get; set; }
+        public long HistoryBytes { get; set; }
+        public int OfflineQueueCount { get; set; }
+        public long OfflineQueueBytes { get; set; }
     }
 
     /// <summary>State of the single active countdown/timer job, if any.</summary>

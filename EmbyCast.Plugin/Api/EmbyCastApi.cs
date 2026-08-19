@@ -97,6 +97,12 @@ namespace EmbyCast.Plugin.Api
         public bool IncludeNewSeries { get; set; } = true;
         public bool IncludeNewEpisodes { get; set; } = false;
         public string EpisodeTemplate { get; set; }
+        /// <summary>"Nur an Web-Browser-Sitzungen senden" - see DeliveryService.IsWebSession.
+        /// Offered only for Media News (the message type long enough that non-web clients often
+        /// can't display it well). A user reachable only via a non-web active session falls
+        /// through to the offline queue instead of being skipped, so the message still arrives
+        /// once they open a browser - see DeliveryService.SendAsync.</summary>
+        public bool WebOnly { get; set; } = false;
     }
 
     public class MediaNewsPreviewDto
@@ -249,6 +255,39 @@ namespace EmbyCast.Plugin.Api
         public bool TimerActive { get; set; }
     }
 
+    // ---- "Geplante Reinigung" ----------------------------------------------
+
+    public class CleanupStatsDto
+    {
+        public long TotalFileBytes { get; set; }
+        public int HistoryCount { get; set; }
+        public long HistoryBytes { get; set; }
+        public int OfflineQueueCount { get; set; }
+        public long OfflineQueueBytes { get; set; }
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Cleanup/Stats", "GET", Summary = "Storage size breakdown for the 'Geplante Reinigung' card")]
+    public class GetCleanupStats : IReturn<CleanupStatsDto> { }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Cleanup/PurgeOffline", "POST", Summary = "'Alle nicht zugestellten Nachrichten löschen' - immediately expire every currently queued offline message")]
+    public class PurgeOfflineNow : IReturn<object> { }
+
+    /// <summary>Which MessageOrigin categories "History sofort löschen" (and the automatic
+    /// Feld-2 purge) should affect - mirrors PluginConfiguration.HistoryCleanupInclude*.</summary>
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Cleanup/PurgeHistory", "POST", Summary = "'History sofort löschen' - immediately delete history entries of the given message types")]
+    public class PurgeHistoryNow : IReturn<object>
+    {
+        public bool IncludeInstant { get; set; } = true;
+        public bool IncludeScheduled { get; set; } = true;
+        public bool IncludeTimer { get; set; } = true;
+        public bool IncludeMediaNews { get; set; } = true;
+        public bool IncludeWelcome { get; set; } = true;
+        public bool IncludeOffline { get; set; } = true;
+    }
+
     // =====================================================================
     // Service implementation
     //
@@ -365,7 +404,8 @@ namespace EmbyCast.Plugin.Api
             var mode = ParseMode(request.RecipientMode);
 
             var outcome = await P.Delivery.SendAsync(
-                header, text, 0, mode, request.UserIds, MessageOrigin.MediaNews
+                header, text, 0, mode, request.UserIds, MessageOrigin.MediaNews,
+                webOnly: request.WebOnly
             ).ConfigureAwait(false);
 
             result.SendOutcome = outcome;
@@ -580,6 +620,44 @@ namespace EmbyCast.Plugin.Api
                 PendingScheduledMessages = P.Store.GetScheduled().Count,
                 TimerActive = P.Timer.GetStatus().Active
             };
+        }
+
+        public object Get(GetCleanupStats request)
+        {
+            var stats = P.Store.GetStorageStats();
+            return new CleanupStatsDto
+            {
+                TotalFileBytes = stats.TotalFileBytes,
+                HistoryCount = stats.HistoryCount,
+                HistoryBytes = stats.HistoryBytes,
+                OfflineQueueCount = stats.OfflineQueueCount,
+                OfflineQueueBytes = stats.OfflineQueueBytes
+            };
+        }
+
+        public object Post(PurgeOfflineNow request)
+        {
+            var count = P.Store.PurgeAllOffline();
+            return new { Success = true, Count = count };
+        }
+
+        public object Post(PurgeHistoryNow request)
+        {
+            var includedTypes = ToIncludedTypes(request);
+            var count = P.Store.PurgeHistoryNow(includedTypes);
+            return new { Success = true, Count = count };
+        }
+
+        private static HashSet<MessageOrigin> ToIncludedTypes(PurgeHistoryNow request)
+        {
+            var includedTypes = new HashSet<MessageOrigin>();
+            if (request.IncludeInstant) includedTypes.Add(MessageOrigin.Instant);
+            if (request.IncludeScheduled) includedTypes.Add(MessageOrigin.Scheduled);
+            if (request.IncludeTimer) includedTypes.Add(MessageOrigin.Timer);
+            if (request.IncludeMediaNews) includedTypes.Add(MessageOrigin.MediaNews);
+            if (request.IncludeWelcome) includedTypes.Add(MessageOrigin.Welcome);
+            if (request.IncludeOffline) includedTypes.Add(MessageOrigin.Offline);
+            return includedTypes;
         }
 
         public async Task<object> Post(CheckUpdate request)

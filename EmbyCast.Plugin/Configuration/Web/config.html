@@ -92,9 +92,39 @@
       .bcm-badge.delivered { background:rgba(30,140,30,0.2); color:#7ddc7d; border:1px solid rgba(30,140,30,0.35); }
       .bcm-badge.pending { background:rgba(180,140,0,0.18); color:#e0b830; border:1px solid rgba(180,140,0,0.35); }
       .bcm-badge.failed { background:rgba(180,30,30,0.2); color:#ff6b6b; border:1px solid rgba(180,30,30,0.4); }
+      .bcm-badge.expired { background:rgba(128,128,128,0.2); color:#b8b8b8; border:1px solid rgba(128,128,128,0.4); }
       .bcm-dismiss { font-size:.75em; color:inherit; opacity:.55; background:none; border:1px solid var(--bcm-border); border-radius:4px; padding:.2em .6em; cursor:pointer; }
       .bcm-inline-note { font-size:.8em; opacity:.55; margin-top:.3em; }
       .bcm-refresh-link { font-size:.8em; opacity:.5; cursor:pointer; }
+
+      /* "Nur an Web-Browser-Sitzungen senden" (Media News only) - checkbox row under Recipients
+         plus an explanatory note box referencing "Geplante Reinigung" below it. */
+      .webonly-row { display:flex; align-items:center; gap:.55em; margin-top:.9em; padding-top:.7em; border-top:1px dashed var(--bcm-border); }
+      .webonly-row input { width:16px; height:16px; accent-color:#00a4dc; cursor:pointer; margin:0; }
+      .webonly-row label { font-size:.9em; opacity:.95; cursor:pointer; display:flex; align-items:center; gap:.4em; margin:0; }
+      .webonly-icon { width:15px; height:15px; stroke:#5fc9ee; fill:none; stroke-width:2; flex:none; }
+      .webonly-note {
+        display:flex; gap:.5em; align-items:flex-start; font-size:.8em; opacity:.75; line-height:1.5;
+        margin:.5em 0 0 1.9em; padding:.6em .8em; background:rgba(0,164,220,0.08); border:1px solid rgba(0,164,220,0.25); border-radius:6px;
+      }
+      .webonly-note svg { width:14px; height:14px; stroke:#5fc9ee; fill:none; stroke-width:2; flex:none; margin-top:.15em; }
+
+      /* "Geplante Reinigung" */
+      .storage-box { display:flex; flex-wrap:wrap; gap:.3em 1.2em; font-size:.82em; opacity:.85; background:rgba(0,0,0,0.12); border-radius:6px; padding:.7em .9em; margin-bottom:1.3em; }
+      .storage-box b { opacity:.95; }
+      .cleanup-field { margin-bottom:1.3em; padding-bottom:1.2em; border-bottom:1px dashed var(--bcm-border); }
+      .cleanup-field:last-of-type { border-bottom:none; margin-bottom:1em; padding-bottom:0; }
+      .field-sentence { font-size:.92em; line-height:1.65; margin:0 0 .8em; }
+      .field-sentence input[type=number] {
+        width:56px; box-sizing:border-box; padding:.3em .4em; font-size:.95em; border-radius:4px;
+        border:1px solid var(--bcm-border); background:rgba(0,0,0,0.15); color:inherit; text-align:center;
+      }
+      .type-checks { display:flex; flex-wrap:wrap; gap:.5em .9em; margin:0 0 .9em; padding:.7em .8em; background:rgba(0,0,0,0.12); border-radius:6px; }
+      .type-checks label { display:flex; align-items:center; gap:.4em; font-size:.82em; opacity:.9; cursor:pointer; margin:0; }
+      .type-checks input { width:14px; height:14px; accent-color:#00a4dc; cursor:pointer; margin:0; }
+      .type-checks-title { flex-basis:100%; font-size:.78em; opacity:.6; margin-bottom:.1em; }
+      .cleanup-field-actions { display:flex; justify-content:flex-end; }
+      .bcm-btn.cleannow { background:rgba(220,120,0,0.15); color:#f0a75f; border:1px solid rgba(220,120,0,0.5); }
 
       /* Status/badge/history-tag text colors above are tuned for the dark theme (bright text on
          a background that stays dark, since the colored fills are semi-transparent and blend
@@ -110,6 +140,7 @@
       .bcm-light-bg .bcm-badge.delivered { color:#1a6b1a; }
       .bcm-light-bg .bcm-badge.pending { color:#6b5000; }
       .bcm-light-bg .bcm-badge.failed { color:#8a1f1f; }
+      .bcm-light-bg .bcm-badge.expired { color:#555; }
     </style>
 
     <div class="bcm-page">
@@ -341,6 +372,18 @@
             <label><input type="radio" name="medianews-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
           </div>
           <div class="bcm-userlist medianews-userlist"></div>
+
+          <div class="webonly-row">
+            <input type="checkbox" class="medianews-webonly" id="medianews-webonly" />
+            <label for="medianews-webonly">
+              <svg class="webonly-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+              <span data-i18n="labelWebOnly">Send only to web-browser sessions</span>
+            </label>
+          </div>
+          <div class="webonly-note">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.3" r=".4" fill="#5fc9ee" stroke="none"/></svg>
+            <span data-i18n="webOnlyNote">Useful for long Media News lists, which often don't fit well on phone or TV apps. Users without an active web-browser session won't get it right away - it stays saved and is delivered automatically the next time they log in via a web browser. If it's still undelivered by then, it will eventually be removed automatically according to the "Geplante Reinigung" settings below.</span>
+          </div>
         </div>
 
         <div class="bcm-preview medianews-preview" style="display:none;"></div>
@@ -431,6 +474,52 @@
         <p class="bcm-desc" data-i18n="historyDesc">Every message this plugin has sent, with per-user delivery status. Green = delivered, yellow = pending (offline, will be delivered at next login).</p>
         <div class="bcm-status history-status"></div>
         <div class="history-list"></div>
+      </div>
+
+      <!-- ============ SCHEDULED CLEANUP ============ -->
+      <div class="bcm-card">
+        <h2 data-i18n="cleanupTitle">Scheduled Cleanup</h2>
+        <p class="bcm-desc" data-i18n="cleanupDesc">Automatically cleans up undelivered messages and old history entries.</p>
+
+        <div class="storage-box cleanup-storage-box"></div>
+
+        <div class="cleanup-field">
+          <p class="field-sentence">
+            <span data-i18n="cleanupOfflinePrefix">Offline messages are marked "Expired" and removed from the queue after</span>
+            <input type="number" class="cleanup-offline-days" min="1" max="365" value="7" />
+            <span data-i18n="cleanupOfflineSuffix">day(s).</span>
+          </p>
+          <div class="cleanup-field-actions">
+            <button type="button" class="bcm-btn cleannow cleanup-purge-offline" data-i18n="btnPurgeOffline">Delete all undelivered messages</button>
+          </div>
+        </div>
+
+        <div class="cleanup-field">
+          <p class="field-sentence">
+            <span data-i18n="cleanupHistoryPrefix">All selected history entries below are deleted after</span>
+            <input type="number" class="cleanup-history-days" min="1" max="365" value="14" />
+            <span data-i18n="cleanupHistorySuffix">day(s). Scheduled Messages and the Media News automation (weekly job) are not affected by this.</span>
+          </p>
+
+          <div class="type-checks cleanup-type-checks">
+            <span class="type-checks-title" data-i18n="cleanupTypesTitle">Affected message types:</span>
+            <label><input type="checkbox" class="cleanup-type-instant" checked /> <span data-i18n="typeInstant">Instant Message</span></label>
+            <label><input type="checkbox" class="cleanup-type-scheduled" checked /> <span data-i18n="typeScheduled">Scheduled Message</span></label>
+            <label><input type="checkbox" class="cleanup-type-timer" checked /> <span data-i18n="typeTimer">Timer &amp; Countdown</span></label>
+            <label><input type="checkbox" class="cleanup-type-medianews" checked /> <span data-i18n="typeMediaNews">Media News</span></label>
+            <label><input type="checkbox" class="cleanup-type-welcome" checked /> <span data-i18n="typeWelcome">Welcome Message</span></label>
+            <label><input type="checkbox" class="cleanup-type-offline" checked /> <span data-i18n="typeOffline">Offline</span></label>
+          </div>
+
+          <div class="cleanup-field-actions">
+            <button type="button" class="bcm-btn cleannow cleanup-purge-history" data-i18n="btnPurgeHistory">Delete history now</button>
+          </div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn cleanup-save" data-i18n="btnSaveCleanup">Save Settings</button>
+        </div>
+        <div class="bcm-status cleanup-status"></div>
       </div>
 
     </div>

@@ -62,6 +62,16 @@ namespace EmbyCast.Plugin.Services
             _getConfig = getConfig;
         }
 
+        /// <summary>Client-name check backing the "Nur an Web-Browser-Sitzungen senden" option
+        /// (currently offered only for Media News - see webOnly below). Emby's own web client
+        /// reports SessionInfo.Client as "Emby Web" regardless of the device it's running on, so
+        /// this also matches a narrow mobile-browser window, and does NOT match the separate
+        /// desktop "Emby Theater" app - it's an approximation of "has room to show a long
+        /// message", not a true screen-size check.</summary>
+        internal static bool IsWebSession(SessionInfo session) =>
+            session != null && !string.IsNullOrEmpty(session.Client) &&
+            session.Client.IndexOf("Web", StringComparison.OrdinalIgnoreCase) >= 0;
+
         public async Task<SendOutcome> SendAsync(
             string header,
             string text,
@@ -69,7 +79,8 @@ namespace EmbyCast.Plugin.Services
             RecipientMode mode,
             IEnumerable<string> specificUserIds,
             MessageOrigin origin,
-            DateTime? scheduledForUtc = null)
+            DateTime? scheduledForUtc = null,
+            bool webOnly = false)
         {
             var outcome = new SendOutcome();
             try
@@ -115,7 +126,11 @@ namespace EmbyCast.Plugin.Services
 
                 if (mode == RecipientMode.Active)
                 {
-                    foreach (var session in liveSessions.Where(s => s.IsActive))
+                    // webOnly here just narrows which currently-active sessions get it - "Active"
+                    // never queues for anyone regardless (that's the whole point of choosing
+                    // Active), so a non-web-active user is simply skipped, exactly like an
+                    // inactive user already is.
+                    foreach (var session in liveSessions.Where(s => s.IsActive && (!webOnly || IsWebSession(s))))
                     {
                         await SendToSessionAsync(sessionManager, session, command, entry, outcome).ConfigureAwait(false);
                     }
@@ -150,9 +165,18 @@ namespace EmbyCast.Plugin.Services
                         .Where(s => s.IsActive && string.Equals(IdNormalization.Normalize(s.UserId), userId, StringComparison.OrdinalIgnoreCase))
                         .ToList();
 
-                    if (activeSessionsForUser.Count > 0)
+                    // IMPORTANT: the webOnly filter is applied here, BEFORE deciding whether this
+                    // user counts as "has an active session" - not just at send time. A user whose
+                    // only active session is a phone/TV app must fall through to the offline-queue
+                    // branch below (so the message waits for them to open a web browser instead),
+                    // not be silently dropped by filtering it out only when actually sending.
+                    var matchingSessionsForUser = webOnly
+                        ? activeSessionsForUser.Where(IsWebSession).ToList()
+                        : activeSessionsForUser;
+
+                    if (matchingSessionsForUser.Count > 0)
                     {
-                        foreach (var session in activeSessionsForUser)
+                        foreach (var session in matchingSessionsForUser)
                             await SendToSessionAsync(sessionManager, session, command, entry, outcome).ConfigureAwait(false);
                     }
                     else if (config.OfflineDeliveryEnabled)
@@ -164,7 +188,8 @@ namespace EmbyCast.Plugin.Services
                             UserId = userId,
                             Header = normalizedHeader,
                             Text = normalizedText,
-                            TimeoutMs = timeoutMs
+                            TimeoutMs = timeoutMs,
+                            WebOnly = webOnly
                         });
                         _store.UpdateHistoryDelivery(entry.Id, userId, new DeliveryRecord
                         {
@@ -244,10 +269,13 @@ namespace EmbyCast.Plugin.Services
         /// <summary>Delivers any queued offline messages for a user whose session just started,
         /// and updates the originating history entry's delivery status. Called from
         /// SessionEventListener. <paramref name="userId"/> must already be normalized via
-        /// IdNormalization.Normalize() - the offline queue is keyed by that canonical form.</summary>
-        public async Task DeliverOfflineQueueForUserAsync(string userId, string username, string sessionId)
+        /// IdNormalization.Normalize() - the offline queue is keyed by that canonical form.
+        /// <paramref name="isWebSession"/> must reflect the CLIENT of THIS specific newly-started
+        /// session (see IsWebSession) - a WebOnly-flagged message only gets taken/delivered when
+        /// this is true; otherwise it's left queued for a future, more suitable login.</summary>
+        public async Task DeliverOfflineQueueForUserAsync(string userId, string username, string sessionId, bool isWebSession)
         {
-            var pending = _store.TakePendingForUser(userId);
+            var pending = _store.TakePendingForUser(userId, isWebSession);
             if (pending.Count == 0) return;
 
             var sessionManager = _appHost.Resolve<ISessionManager>();

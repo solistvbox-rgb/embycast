@@ -91,11 +91,27 @@ namespace EmbyCast.Plugin.Configuration
 
         // ---- Offline delivery -----------------------------------------------
         public bool OfflineDeliveryEnabled { get; set; } = true;
-        /// <summary>Offline messages older than this are purged automatically so the queue
-        /// doesn't grow forever for users who never log back in.</summary>
-        public int OfflineMessageMaxAgeDays { get; set; } = 30;
+        /// <summary>"Geplante Reinigung" Feld 1: offline messages older than this (counted from
+        /// OfflineMessageRecord.QueuedAtUtc) are marked DeliveryStatus.Expired and removed from
+        /// the queue automatically, so it doesn't grow forever for users who never log back in.
+        /// Existing installs keep whatever value was already saved (this default only applies to
+        /// a brand-new config file) - see ScheduledMessageBackgroundService.ProcessCleanupAsync.</summary>
+        public int OfflineMessageMaxAgeDays { get; set; } = 7;
 
-        // ---- History --------------------------------------------------------
+        // ---- History ----------------------------------------------------------
         public int HistoryMaxEntries { get; set; } = 300;
+        /// <summary>"Geplante Reinigung" Feld 2: history entries older than this (counted from
+        /// HistoryEntry.CreatedAtUtc) are deleted automatically, for the message types selected
+        /// via the HistoryCleanupInclude* flags below. The dashboard enforces this to always be
+        /// >= OfflineMessageMaxAgeDays (so a history entry is never deleted while its offline
+        /// delivery task is still pending); ProcessCleanupAsync also clamps defensively in case
+        /// that's ever bypassed.</summary>
+        public int HistoryMaxAgeDays { get; set; } = 14;
+        public bool HistoryCleanupIncludeInstant { get; set; } = true;
+        public bool HistoryCleanupIncludeScheduled { get; set; } = true;
+        public bool HistoryCleanupIncludeTimer { get; set; } = true;
+        public bool HistoryCleanupIncludeMediaNews { get; set; } = true;
+        public bool HistoryCleanupIncludeWelcome { get; set; } = true;
+        public bool HistoryCleanupIncludeOffline { get; set; } = true;
     }
 }
