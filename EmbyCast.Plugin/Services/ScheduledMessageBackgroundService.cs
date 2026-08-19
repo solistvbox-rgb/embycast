@@ -21,9 +21,12 @@ namespace EmbyCast.Plugin.Services
     public class ScheduledMessageBackgroundService
     {
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(20);
-        /// <summary>Cleanup doesn't need to run every 20s poll tick - once every few minutes is
-        /// plenty for a day-granularity expiry check, and avoids needless store-file rewrites.</summary>
-        private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
+        /// <summary>Cleanup doesn't need to run every 20s poll tick - the retention fields are
+        /// day-granularity anyway, so once a day is plenty and avoids needless store-file
+        /// rewrites/CPU wake-ups. Still runs once immediately on startup (see _lastCleanupUtc's
+        /// DateTime.MinValue initializer below), so a freshly (re)started server doesn't wait a
+        /// full day before its first pass.</summary>
+        private static readonly TimeSpan CleanupInterval = TimeSpan.FromDays(1);
 
         private readonly DeliveryService _delivery;
         private readonly MessageStore _store;
