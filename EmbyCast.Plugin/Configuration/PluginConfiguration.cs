@@ -113,5 +113,14 @@ namespace EmbyCast.Plugin.Configuration
         public bool HistoryCleanupIncludeMediaNews { get; set; } = true;
         public bool HistoryCleanupIncludeWelcome { get; set; } = true;
         public bool HistoryCleanupIncludeOffline { get; set; } = true;
+
+        // ---- Dashboard tile homepage ------------------------------------------
+        /// <summary>Comma separated list of tile keys ("updates,instant,scheduled,timer,
+        /// medianews,welcome,history,cleanup") in the admin's preferred display order, set via
+        /// drag &amp; drop on the dashboard's tile homepage. Empty = use the built-in default
+        /// order. On load, config.js drops any unknown keys and appends any missing known keys
+        /// at the end, so a future plugin update that adds a new tile still shows up for
+        /// existing installs without needing a fresh default.</summary>
+        public string TileOrderCsv { get; set; } = "";
     }
 }
