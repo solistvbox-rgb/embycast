@@ -644,6 +644,15 @@ define(['baseView'], function (BaseView) {
             group.querySelectorAll('input[type=radio]').forEach(function (radio) {
                 radio.addEventListener('change', function () {
                     list.classList.toggle('show', radio.value === 'Specific' && radio.checked);
+                    // Switching the recipient mode (e.g. Specific -> Active -> Specific) used to
+                    // leave previously checked users checked in the hidden list, since the
+                    // checkboxes were only ever hidden via CSS, never actually unchecked - so
+                    // they'd silently reappear pre-selected on switching back to "Selected users".
+                    // A 'change' event only fires when the checked radio actually changes (not on
+                    // re-clicking the already-selected one), so this only resets on a real mode
+                    // switch, never while the admin is just ticking/unticking users.
+                    Array.prototype.slice.call(list.querySelectorAll('input[type=checkbox]:checked'))
+                        .forEach(function (cb) { cb.checked = false; });
                 });
             });
         }
