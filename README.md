@@ -68,3 +68,9 @@ MIT — free to use, modify and distribute.
 ## Built with AI assistance
 
 Developed with the help of [Claude](https://claude.ai) (Anthropic).
+
+## Support
+
+If EmbyCast is useful to you, consider [buying me a coffee ☕](https://ko-fi.com/soliflix).
+
+[![ko-fi](https://storage.ko-fi.com/cdn/kofi3.png?v=3)](https://ko-fi.com/soliflix)
