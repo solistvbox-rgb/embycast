@@ -1,0 +1,438 @@
+<div is="emby-scroller"
+     class="view flex flex-direction-column scrollFrameY flex-grow"
+     data-horizontal="false"
+     data-forcescrollbar="true"
+     data-centerfocus="true"
+     data-bindheader="true"
+     data-controller="__plugin/embycastconfig"
+     data-title="EmbyCast">
+
+  <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+
+    <style>
+      /* Theme-neutral tokens: mid-gray (128,128,128) sits roughly equidistant between a black
+         and a white dashboard background, so a single set of values reads as a visible-but-
+         subtle outline/fill on BOTH the default dark Emby theme and the light theme - unlike
+         the previous rgba(255,255,255,X) values below, which were tuned only for a dark
+         background and became nearly invisible (white-on-white) on the light theme. */
+      :root {
+        --bcm-border: rgba(128,128,128,0.4);
+        --bcm-fill: rgba(128,128,128,0.08);
+        --bcm-fill-strong: rgba(128,128,128,0.18);
+      }
+      .bcm-page { max-width: 980px; }
+      .bcm-topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.4em; flex-wrap:wrap; gap:.6em; }
+      .bcm-title { margin:0; font-size:1.6em; }
+      .bcm-subtitle { color:var(--text-color-secondary,#aaa); margin:.2em 0 0; font-size:.95em; }
+      .bcm-langswitch { display:flex; gap:.4em; }
+      .bcm-langbtn { padding:.4em .9em; font-size:.85em; border-radius:4px; border:1px solid var(--bcm-border); background:var(--bcm-fill-strong); color:inherit; cursor:pointer; }
+      .bcm-langbtn.active { background:#00a4dc; border-color:#00a4dc; color:#fff; }
+      .bcm-card { border:1px solid var(--bcm-border); border-radius:8px; padding:1.3em 1.4em; margin-bottom:1.6em; background:var(--bcm-fill); box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+      .bcm-card h2 { margin:0 0 .2em; font-size:1.15em; display:flex; align-items:center; gap:.5em; }
+      .bcm-card .bcm-desc { color:var(--text-color-secondary,#aaa); margin:0 0 1.1em; font-size:.88em; }
+      .bcm-field { margin-bottom:1.1em; }
+      .bcm-field label { display:block; margin-bottom:.35em; font-size:.88em; opacity:.85; }
+      .bcm-field input[type=text], .bcm-field input[type=number], .bcm-field input[type=datetime-local], .bcm-field textarea, .bcm-field select {
+        width:100%; box-sizing:border-box; padding:.5em .6em; font-size:1em; border-radius:4px; border:1px solid var(--bcm-border); background:rgba(0,0,0,0.15); color:inherit;
+      }
+      .bcm-field textarea { resize:vertical; min-height:5em; }
+      .bcm-row { display:flex; gap:1em; flex-wrap:wrap; }
+      .bcm-row > .bcm-field { flex:1; min-width:180px; }
+      .bcm-radio-group { display:flex; gap:1.2em; flex-wrap:wrap; margin-bottom:.6em; }
+      .bcm-radio-group label { display:flex; align-items:center; gap:.4em; font-size:.9em; opacity:.9; cursor:pointer; margin:0; }
+      .bcm-userlist { max-height:220px; overflow-y:auto; border:1px solid var(--bcm-border); border-radius:4px; padding:.5em .7em; display:none; }
+      .bcm-userlist.show { display:block; }
+      .bcm-userlist label { display:flex; align-items:center; gap:.5em; padding:.3em 0; font-size:.9em; cursor:pointer; }
+      .bcm-userlist .bcm-nowplaying { opacity:.55; font-size:.82em; margin-left:.3em; }
+      .bcm-btn { padding:.6em 1.5em; font-size:1em; cursor:pointer; border-radius:4px; border:none; background:#00a4dc; color:#fff; }
+      .bcm-btn.secondary { background:var(--bcm-fill-strong); color:inherit; border:1px solid var(--bcm-border); }
+      .bcm-btn:disabled { opacity:.5; cursor:default; }
+      .bcm-btnrow { display:flex; gap:.7em; flex-wrap:wrap; align-items:center; }
+      .bcm-status { margin-top:1em; padding:.7em 1em; border-radius:4px; display:none; font-size:.9em; }
+      .bcm-status.ok { display:block; background:rgba(30,140,30,0.2); color:#7ddc7d; border:1px solid rgba(30,140,30,0.4); }
+      .bcm-status.err { display:block; background:rgba(180,30,30,0.2); color:#ff6b6b; border:1px solid rgba(180,30,30,0.4); }
+      .bcm-presets { display:flex; gap:.5em; flex-wrap:wrap; margin-top:.6em; margin-bottom:.6em; }
+      .bcm-preset-chip { padding:.35em .8em; border-radius:99px; border:1px solid var(--bcm-border); background:var(--bcm-fill-strong); font-size:.85em; cursor:pointer; }
+      .bcm-preset-chip.active { background:#00a4dc; border-color:#00a4dc; color:#fff; }
+      .bcm-preview { border:1px dashed var(--bcm-border); border-radius:6px; padding:.8em 1em; font-size:.87em; opacity:.85; white-space:pre-line; margin-bottom:.8em; }
+      /* Media News previews only (manual send, auto-send, and the upcoming auto-send card's own
+         "saved settings" preview) - capped at the same height/scroll behavior as .history-list
+         below, so a long list of newly added titles doesn't push the rest of the dashboard page
+         down indefinitely. Deliberately scoped to these three classes rather than the shared
+         .bcm-preview base class, so the Timer countdown preview (which is always short) is left
+         growing freely as before. */
+      .medianews-preview, .medianews-auto-preview, .medianews-auto-saved-preview { max-height:640px; overflow-y:auto; padding-right:.4em; }
+      .bcm-countdown-visual { font-size:1.8em; font-weight:600; text-align:center; padding:.5em 0; letter-spacing:.03em; }
+      .bcm-countdown-bar-track { height:6px; border-radius:99px; background:var(--bcm-fill-strong); overflow:hidden; margin-bottom:1em; }
+      .bcm-countdown-bar-fill { height:100%; background:#00a4dc; width:0%; transition:width 1s linear; }
+      .bcm-toggle-row { display:flex; align-items:center; gap:.6em; margin-bottom:1em; }
+      /* Toggle-switch look for the Welcome Message enabled/disabled state - visually a
+         switch, functionally still a plain <input type="checkbox">, so no JS changes were needed
+         to wire it up (existing code only ever reads/sets .checked). The checkbox itself stays in
+         the DOM and keeps keyboard/screen-reader support; it's just visually hidden (opacity:0,
+         not display:none) and stretched over the whole slider so it remains directly clickable/
+         focusable in place. */
+      .bcm-switch { position:relative; display:inline-block; width:42px; height:24px; flex:none; }
+      .bcm-switch input { position:absolute; top:0; left:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; z-index:1; }
+      .bcm-switch-slider { position:absolute; top:0; left:0; right:0; bottom:0; background:var(--bcm-fill-strong); border:1px solid var(--bcm-border); border-radius:24px; transition:background-color .15s, border-color .15s; }
+      .bcm-switch-slider::before { content:""; position:absolute; height:18px; width:18px; left:2px; top:2px; background:#fff; border-radius:50%; transition:transform .15s; }
+      .bcm-switch input:checked ~ .bcm-switch-slider { background:#00a4dc; border-color:#00a4dc; }
+      .bcm-switch input:checked ~ .bcm-switch-slider::before { transform:translateX(18px); }
+      .bcm-switch input:focus-visible ~ .bcm-switch-slider { outline:2px solid #00a4dc; outline-offset:2px; }
+      /* Caps the history list at roughly 10 typical entries' worth of height before it becomes
+         its own scroll area, so a long message history no longer pushes the rest of the
+         dashboard page down indefinitely. With 10 or fewer entries the list's natural height
+         stays under this cap, so no scrollbar appears at all - it only kicks in once there's
+         enough content to need it. Adjust this one value to show more/fewer before scrolling. */
+      .history-list { max-height:640px; overflow-y:auto; padding-right:.4em; }
+      .bcm-history-item { border:1px solid var(--bcm-border); border-radius:6px; padding:.75em 1em; margin-bottom:.6em; background:rgba(0,0,0,0.15); }
+      .bcm-history-head { display:flex; justify-content:space-between; align-items:flex-start; gap:1em; margin-bottom:.3em; }
+      .bcm-history-tag { font-size:.72em; padding:.15em .55em; border-radius:99px; background:rgba(0,164,220,0.2); color:#5fc9ee; border:1px solid rgba(0,164,220,0.4); margin-right:.4em; }
+      .bcm-badge { display:inline-block; font-size:.72em; padding:.2em .55em; border-radius:99px; margin:.15em; }
+      .bcm-badge.delivered { background:rgba(30,140,30,0.2); color:#7ddc7d; border:1px solid rgba(30,140,30,0.35); }
+      .bcm-badge.pending { background:rgba(180,140,0,0.18); color:#e0b830; border:1px solid rgba(180,140,0,0.35); }
+      .bcm-badge.failed { background:rgba(180,30,30,0.2); color:#ff6b6b; border:1px solid rgba(180,30,30,0.4); }
+      .bcm-dismiss { font-size:.75em; color:inherit; opacity:.55; background:none; border:1px solid var(--bcm-border); border-radius:4px; padding:.2em .6em; cursor:pointer; }
+      .bcm-inline-note { font-size:.8em; opacity:.55; margin-top:.3em; }
+      .bcm-refresh-link { font-size:.8em; opacity:.5; cursor:pointer; }
+
+      /* Status/badge/history-tag text colors above are tuned for the dark theme (bright text on
+         a background that stays dark, since the colored fills are semi-transparent and blend
+         with whatever page background sits behind them). On a light page background those same
+         semi-transparent fills turn pastel/light, so the same bright text becomes low-contrast.
+         `bcm-light-bg` is added to the view root at runtime (see applyBackgroundAwareTheme() in
+         config.js, which measures the actual rendered page background rather than guessing at
+         an Emby theme name/class) - these overrides darken just the text for that case, leaving
+         the pill backgrounds/borders untouched. */
+      .bcm-light-bg .bcm-status.ok { color:#1a6b1a; }
+      .bcm-light-bg .bcm-status.err { color:#8a1f1f; }
+      .bcm-light-bg .bcm-history-tag { color:#05586e; }
+      .bcm-light-bg .bcm-badge.delivered { color:#1a6b1a; }
+      .bcm-light-bg .bcm-badge.pending { color:#6b5000; }
+      .bcm-light-bg .bcm-badge.failed { color:#8a1f1f; }
+    </style>
+
+    <div class="bcm-page">
+
+      <div class="bcm-topbar">
+        <div>
+          <h1 class="bcm-title" data-i18n="pageTitle">EmbyCast</h1>
+          <p class="bcm-subtitle" data-i18n="pageSubtitle">Send messages to your users, right from the dashboard.</p>
+        </div>
+        <div class="bcm-langswitch">
+          <button type="button" class="bcm-langbtn" data-lang="en">EN</button>
+          <button type="button" class="bcm-langbtn" data-lang="de">DE</button>
+        </div>
+      </div>
+
+      <!-- ============ PLUGIN UPDATES ============ -->
+      <div class="bcm-card">
+        <h2 data-i18n="updatesTitle">Plugin Updates</h2>
+        <p class="bcm-desc" data-i18n="updatesDesc">Check GitHub for a newer version of this plugin and install it with one click.</p>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn secondary update-check" data-i18n="btnCheckUpdate">Check for Updates</button>
+          <button type="button" class="bcm-btn update-install" data-i18n="btnInstallUpdate" style="display:none;">&#8659; Install Update</button>
+        </div>
+        <div class="bcm-status update-status"></div>
+      </div>
+
+      <!-- ============ INSTANT MESSAGE ============ -->
+      <div class="bcm-card">
+        <h2 data-i18n="instantTitle">Instant Message</h2>
+
+        <div class="bcm-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="instant-header" maxlength="80" value="Announcement" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessage">Message</label>
+          <textarea class="instant-text" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
+        </div>
+        <div class="bcm-row">
+          <div class="bcm-field">
+            <label data-i18n="labelTimeout">Auto-dismiss (seconds, 0 = stays until dismissed)</label>
+            <input type="number" class="instant-timeout" value="0" min="0" max="600" />
+            <p class="bcm-inline-note" data-i18n="noteTimeoutNotGuaranteed">Not every Emby client honors this exact number of seconds - some clients may show the message for a different length of time regardless of this value. 0 (stays until manually dismissed) is the one value reliably respected everywhere.</p>
+          </div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group instant-recipient-group">
+            <label><input type="radio" name="instant-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="instant-recipient" value="All" /> <span data-i18n="recipientAll">All users</span></label>
+            <label><input type="radio" name="instant-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+          </div>
+          <div class="bcm-userlist instant-userlist"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn instant-send" data-i18n="btnSendNow">Send Now</button>
+          <span class="bcm-refresh-link instant-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status instant-status"></div>
+      </div>
+
+      <!-- ============ SCHEDULED MESSAGE ============ -->
+      <div class="bcm-card">
+        <h2 data-i18n="scheduledTitle">Scheduled Message</h2>
+        <p class="bcm-desc" data-i18n="scheduledDesc">Queue a message to be sent automatically at a future date and time.</p>
+
+        <div class="bcm-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="scheduled-header" maxlength="80" value="Announcement" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessage">Message</label>
+          <textarea class="scheduled-text" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
+        </div>
+        <div class="bcm-row">
+          <div class="bcm-field">
+            <label data-i18n="labelDateTime">Date &amp; time</label>
+            <input type="datetime-local" class="scheduled-datetime" />
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelTimeout">Auto-dismiss (seconds, 0 = stays until dismissed)</label>
+            <input type="number" class="scheduled-timeout" value="0" min="0" max="600" />
+            <p class="bcm-inline-note" data-i18n="noteTimeoutNotGuaranteed">Not every Emby client honors this exact number of seconds - some clients may show the message for a different length of time regardless of this value. 0 (stays until manually dismissed) is the one value reliably respected everywhere.</p>
+          </div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group scheduled-recipient-group">
+            <label><input type="radio" name="scheduled-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="scheduled-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
+            <label><input type="radio" name="scheduled-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+          </div>
+          <div class="bcm-userlist scheduled-userlist"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn scheduled-create" data-i18n="btnSchedule">Schedule Message</button>
+          <span class="bcm-refresh-link scheduled-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status scheduled-status"></div>
+
+        <div style="margin-top:1.4em;">
+          <h3 style="margin:0 0 .6em;font-size:.95em;opacity:.75;" data-i18n="scheduledUpcoming">Upcoming scheduled messages</h3>
+          <div class="scheduled-list"></div>
+        </div>
+      </div>
+
+      <!-- ============ TIMER / COUNTDOWN ============ -->
+      <div class="bcm-card">
+        <h2 data-i18n="timerTitle">Timer &amp; Server Countdown</h2>
+        <p class="bcm-desc" data-i18n="timerDesc">Announce a countdown (e.g. before a restart) with reminders sent at chosen minute marks. The session list is re-checked before every reminder, so users who log in mid-countdown still get the remaining reminders.</p>
+
+        <div class="bcm-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="timer-header" maxlength="80" value="Server Countdown" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessageTemplate">Message (use {minutes} as a placeholder)</label>
+          <textarea class="timer-text">The server will restart in {minutes} minute(s).</textarea>
+        </div>
+
+        <div class="bcm-row">
+          <div class="bcm-field">
+            <label data-i18n="labelTotalMinutes">Total countdown (minutes)</label>
+            <input type="number" class="timer-total" value="60" min="1" max="1440" />
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelTimeout">Auto-dismiss (seconds, 0 = stays until dismissed)</label>
+            <input type="number" class="timer-timeout" value="10" min="0" max="600" />
+            <p class="bcm-inline-note" data-i18n="noteTimeoutNotGuaranteed">Not every Emby client honors this exact number of seconds - some clients may show the message for a different length of time regardless of this value. 0 (stays until manually dismissed) is the one value reliably respected everywhere.</p>
+          </div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelPresets">Reminder minute marks</label>
+          <div class="bcm-presets timer-preset-chips"></div>
+          <input type="text" class="timer-preset-custom" placeholder="60,30,15,5,1" />
+          <p class="bcm-inline-note" data-i18n="presetsNote">Click a preset to toggle it, or type a custom comma-separated list above.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelPreview">Preview</label>
+          <div class="bcm-preview timer-preview"></div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelPostAction">Action after countdown ends</label>
+          <select class="timer-postaction">
+            <option value="None" data-i18n="postActionNone">None (message only)</option>
+            <option value="RestartServer" data-i18n="postActionRestart">Restart server (experimental)</option>
+            <option value="ShutdownServer" data-i18n="postActionShutdown">Shut down server (experimental)</option>
+            <option value="MaintenanceMode" data-i18n="postActionMaintenance">Maintenance mode notice (experimental)</option>
+          </select>
+          <p class="bcm-inline-note" data-i18n="postActionNote">Server actions depend on your Emby Server build and are marked experimental - see the plugin README.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group timer-recipient-group">
+            <label><input type="radio" name="timer-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="timer-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+          </div>
+          <div class="bcm-userlist timer-userlist"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn timer-start" data-i18n="btnStartTimer">Start Timer</button>
+          <button type="button" class="bcm-btn secondary timer-cancel" data-i18n="btnCancelTimer">Cancel Timer</button>
+          <span class="bcm-refresh-link timer-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status timer-status"></div>
+
+        <div class="timer-visual" style="display:none;margin-top:1.2em;">
+          <div class="bcm-countdown-visual timer-countdown-text">--:--:--</div>
+          <div class="bcm-countdown-bar-track"><div class="bcm-countdown-bar-fill"></div></div>
+        </div>
+      </div>
+
+      <!-- ============ MEDIA NEWS ============ -->
+      <div class="bcm-card">
+        <h2 data-i18n="mediaNewsTitle">Media News</h2>
+        <p class="bcm-desc" data-i18n="mediaNewsDesc">Announce recently added movies and TV shows.</p>
+
+        <div class="bcm-row">
+          <div class="bcm-field">
+            <label data-i18n="labelHeader">Header</label>
+            <input type="text" class="medianews-header" maxlength="80" value="What's New" />
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelLookbackDays">Look back (days)</label>
+            <input type="number" class="medianews-days" value="7" min="1" max="90" />
+          </div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelLibraries">Libraries</label>
+          <div class="bcm-userlist show medianews-libraries"></div>
+          <p class="bcm-inline-note" data-i18n="librariesNote">Libraries with a content type such as audiobooks, books or music cannot be used for Media News and are not listed here.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelSeriesMode">Series entries</label>
+          <div class="bcm-radio-group medianews-seriesmode-checks">
+            <label><input type="checkbox" class="medianews-include-series" checked /> <span data-i18n="seriesModeNewSeries">Newly added series</span></label>
+            <label><input type="checkbox" class="medianews-include-episodes" /> <span data-i18n="seriesModeNewEpisodes">New episodes</span></label>
+          </div>
+        </div>
+
+        <div class="bcm-field medianews-episode-template-field" style="display:none;">
+          <label data-i18n="labelEpisodeTemplate">Episode format</label>
+          <input type="text" class="medianews-episode-template" maxlength="200" value="{Series name (year)} - {SxxExx} - {Episode title}" />
+          <div class="bcm-presets medianews-placeholder-chips">
+            <span class="bcm-preset-chip" data-placeholder="{Series name (year)}">{Series name (year)}</span>
+            <span class="bcm-preset-chip" data-placeholder="{SxxExx}">{SxxExx}</span>
+            <span class="bcm-preset-chip" data-placeholder="{Episode title}">{Episode title}</span>
+          </div>
+          <p class="bcm-inline-note" data-i18n="episodeTemplateNote">Click a placeholder to insert it at the cursor position.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group medianews-recipient-group">
+            <label><input type="radio" name="medianews-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="medianews-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
+            <label><input type="radio" name="medianews-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+          </div>
+          <div class="bcm-userlist medianews-userlist"></div>
+        </div>
+
+        <div class="bcm-preview medianews-preview" style="display:none;"></div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn secondary medianews-preview-btn">Preview</button>
+          <button type="button" class="bcm-btn medianews-send" data-i18n="btnSendMediaNewsNow">Send Media News Now</button>
+          <span class="bcm-refresh-link medianews-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status medianews-status"></div>
+
+        <hr style="margin:1.6em 0;border:none;border-top:1px solid var(--bcm-border);" />
+
+        <div class="bcm-toggle-row">
+          <input type="checkbox" class="medianews-auto-enabled" />
+          <label for="" data-i18n="labelAutoSend" style="margin:0;">Send automatically every 7 days</label>
+        </div>
+
+        <div class="bcm-row medianews-auto-fields">
+          <div class="bcm-field">
+            <label data-i18n="labelWeekday">Weekday</label>
+            <select class="medianews-auto-day">
+              <option value="Monday" data-i18n="dayMonday">Monday</option>
+              <option value="Tuesday" data-i18n="dayTuesday">Tuesday</option>
+              <option value="Wednesday" data-i18n="dayWednesday">Wednesday</option>
+              <option value="Thursday" data-i18n="dayThursday">Thursday</option>
+              <option value="Friday" data-i18n="dayFriday" selected>Friday</option>
+              <option value="Saturday" data-i18n="daySaturday">Saturday</option>
+              <option value="Sunday" data-i18n="daySunday">Sunday</option>
+            </select>
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelTime">Time</label>
+            <input type="time" class="medianews-auto-time" value="18:00" />
+          </div>
+        </div>
+
+        <div class="bcm-preview medianews-auto-preview" style="display:none;"></div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn secondary medianews-auto-preview-btn">Preview</button>
+          <button type="button" class="bcm-btn secondary medianews-auto-save" data-i18n="btnSaveAutoSettings">Save Auto-send Settings</button>
+        </div>
+        <div class="bcm-status medianews-auto-status"></div>
+        <p class="bcm-inline-note medianews-next-run" data-i18n="nextRunUnknown">Next scheduled send: unknown</p>
+        <div class="medianews-auto-upcoming" style="display:none;margin-top:.6em;"></div>
+      </div>
+
+      <!-- ============ WELCOME MESSAGE ============ -->
+      <div class="bcm-card">
+        <h2 data-i18n="welcomeTitle">Welcome Message</h2>
+        <p class="bcm-desc" data-i18n="welcomeDesc">Automatically sent the first time a user ever logs in.</p>
+
+        <div class="bcm-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="welcome-header" maxlength="80" value="Welcome!" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessage">Message</label>
+          <textarea class="welcome-text">Welcome to our media server - enjoy your stay!</textarea>
+        </div>
+
+        <!-- No separate Save/Turn off buttons - flipping the switch saves
+             Header/Message together with the new enabled state immediately and starts/stops
+             sending right away. To apply an edited Header/Message while staying enabled, flip
+             the switch off and back on - each flip is itself a save of whatever is currently in
+             the fields. -->
+        <div class="bcm-toggle-row">
+          <label class="bcm-switch">
+            <input type="checkbox" class="welcome-enabled" />
+            <span class="bcm-switch-slider"></span>
+          </label>
+          <label style="margin:0;" data-i18n="labelEnableWelcome">Enable welcome message</label>
+        </div>
+        <p class="bcm-inline-note" data-i18n="noteWelcomeFirstActivation">The first time you enable this, every existing user gets the message at their next login. After that, only users logging in for the very first time receive it - editing the text or toggling it off and on again does not resend it to anyone already welcomed.</p>
+        <div class="bcm-status welcome-status"></div>
+      </div>
+
+      <!-- ============ STATUS & HISTORY ============ -->
+      <div class="bcm-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3em;gap:1em;flex-wrap:wrap;">
+          <h2 style="margin:0;" data-i18n="historyTitle">Status &amp; History</h2>
+          <div style="display:flex;gap:1em;align-items:center;">
+            <span class="bcm-refresh-link history-refresh" data-i18n="refreshHistory">&#8635; Refresh</span>
+            <span class="bcm-refresh-link history-clear-all" data-i18n="clearAllHistory">&#10005; Discard all</span>
+          </div>
+        </div>
+        <p class="bcm-desc" data-i18n="historyDesc">Every message this plugin has sent, with per-user delivery status. Green = delivered, yellow = pending (offline, will be delivered at next login).</p>
+        <div class="bcm-status history-status"></div>
+        <div class="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>

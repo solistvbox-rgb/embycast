@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    IMPORTANT (build notes):
+    - Emby Server plugins MUST target netstandard2.0. Do NOT change this to net8.0/net9.0 -
+      the Emby Server host loads plugin assemblies into its own (older) CLR/AppDomain-style
+      plugin loader and a modern TFM will fail to load or fail at runtime with binding errors.
+    - The "mediabrowser.server.core" NuGet package version below matches the one used by the
+      EmbyNotify / EmbyWeeklyDigest reference plugins (Emby 4.8.x/4.9.x SDK surface). If your
+      target server build is newer, bump the version and re-check for any breaking API
+      changes (in particular around IServerApplicationHost, InternalItemsQuery and
+      IScheduledTask) before shipping.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>EmbyCast.Plugin</AssemblyName>
+    <RootNamespace>EmbyCast.Plugin</RootNamespace>
+    <!-- Bump this on every release, even for dashboard-only (config.html/config.js) changes:
+         Emby's dashboard caches the plugin config page in the browser keyed by plugin version,
+         so leaving this unchanged after editing config.html/config.js means admins can rebuild
+         and redeploy the DLL correctly and still see the OLD page until they hard-refresh /
+         clear their browser cache. Bumping the version forces a fresh fetch. -->
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionSuffix></VersionSuffix>
+    <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
+    <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
+    <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
+    <FileVersion>$(VersionPrefix).0</FileVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="mediabrowser.server.core" Version="4.8.0.80" />
+    <!-- netstandard2.0 has no built-in JSON serializer; System.Text.Json (or Newtonsoft.Json,
+         which Emby already ships) both work fine here. We use System.Text.Json to match the
+         reference plugins and avoid an extra runtime dependency conflict with Emby's own
+         Newtonsoft.Json version. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration\Web\**" />
+    <EmbeddedResource Include="thumb.png" />
+  </ItemGroup>
+
+</Project>
