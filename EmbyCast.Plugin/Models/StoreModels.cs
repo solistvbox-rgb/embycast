@@ -30,6 +30,21 @@ namespace EmbyCast.Plugin.Models
         public bool Active { get; set; } = true;
     }
 
+    /// <summary>A named, flat (non-nested) group of users - a reusable recipient selection
+    /// offered alongside individually-picked users wherever "Specific" recipients are chosen
+    /// (Instant/Scheduled/Timer/Media News). Deliberately flat: a group holds only user ids,
+    /// never other group ids, to keep membership trivial to reason about and display.
+    /// Membership is resolved dynamically at send time (see MessageStore.ExpandGroupsToUserIds
+    /// / DeliveryService.SendAsync) rather than flattened into a fixed user-id list the moment
+    /// a group is picked as a recipient - so editing a group's members later also affects any
+    /// already-created but not-yet-fired Scheduled Message or Timer that still references it.</summary>
+    public class UserGroup
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Name { get; set; }
+        public List<string> UserIds { get; set; } = new List<string>();
+    }
+
     /// <summary>A message an admin scheduled for a future date/time.</summary>
     public class ScheduledMessageRecord
     {
@@ -39,6 +54,10 @@ namespace EmbyCast.Plugin.Models
         public DateTime SendAtUtc { get; set; }
         public string RecipientMode { get; set; } = "All";
         public List<string> SpecificUserIds { get; set; } = new List<string>();
+        /// <summary>Selected user-group ids (see UserGroup) - resolved to actual member user
+        /// ids at send time, not when the message was created, so later membership edits still
+        /// apply. Empty unless RecipientMode is "Specific" and at least one group was checked.</summary>
+        public List<string> SpecificGroupIds { get; set; } = new List<string>();
         public int TimeoutMs { get; set; }
         public bool Sent { get; set; }
         public bool Cancelled { get; set; }
@@ -101,6 +120,8 @@ namespace EmbyCast.Plugin.Models
         public string PostAction { get; set; } = "None"; // PostTimerAction as string
         public string RecipientMode { get; set; } = "Active";
         public List<string> SpecificUserIds { get; set; } = new List<string>();
+        /// <summary>Same semantics as ScheduledMessageRecord.SpecificGroupIds above.</summary>
+        public List<string> SpecificGroupIds { get; set; } = new List<string>();
         public bool Active { get; set; }
         public bool CompletedActionRan { get; set; }
         public string LastError { get; set; }
@@ -114,5 +135,7 @@ namespace EmbyCast.Plugin.Models
         public List<OfflineMessageRecord> OfflineQueue { get; set; } = new List<OfflineMessageRecord>();
         public TimerJobState ActiveTimer { get; set; }
         public HashSet<string> WelcomedUserIds { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Admin-defined named user groups - see UserGroup.</summary>
+        public List<UserGroup> Groups { get; set; } = new List<UserGroup>();
     }
 }

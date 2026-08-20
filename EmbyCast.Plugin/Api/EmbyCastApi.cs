@@ -34,6 +34,9 @@ namespace EmbyCast.Plugin.Api
         /// <summary>"Active" | "All" | "Specific"</summary>
         public string RecipientMode { get; set; } = "Active";
         public List<string> UserIds { get; set; } = new List<string>();
+        /// <summary>Selected user-group ids (see Models.UserGroup) - only meaningful when
+        /// RecipientMode is "Specific". Resolved to member user ids at send time.</summary>
+        public List<string> GroupIds { get; set; } = new List<string>();
     }
 
     [Authenticated(Roles = "Admin")]
@@ -46,6 +49,7 @@ namespace EmbyCast.Plugin.Api
         public DateTime SendAtUtc { get; set; }
         public string RecipientMode { get; set; } = "All";
         public List<string> UserIds { get; set; } = new List<string>();
+        public List<string> GroupIds { get; set; } = new List<string>();
     }
 
     [Authenticated(Roles = "Admin")]
@@ -71,6 +75,7 @@ namespace EmbyCast.Plugin.Api
         public string PostAction { get; set; } = "None";
         public string RecipientMode { get; set; } = "Active";
         public List<string> UserIds { get; set; } = new List<string>();
+        public List<string> GroupIds { get; set; } = new List<string>();
         public int TimeoutMs { get; set; }
     }
 
@@ -90,6 +95,7 @@ namespace EmbyCast.Plugin.Api
         public List<string> LibraryIds { get; set; } = new List<string>();
         public string RecipientMode { get; set; } = "All";
         public List<string> UserIds { get; set; } = new List<string>();
+        public List<string> GroupIds { get; set; } = new List<string>();
         public string Header { get; set; }
         public string Language { get; set; } = "en";
         /// <summary>Independent flags - see PluginConfiguration.MediaNewsIncludeNewSeries
@@ -177,6 +183,7 @@ namespace EmbyCast.Plugin.Api
         public string LibraryIdsCsv { get; set; } = "";
         public string RecipientMode { get; set; } = "All";
         public string SpecificUserIdsCsv { get; set; } = "";
+        public string SpecificGroupIdsCsv { get; set; } = "";
         public bool SkipWhenEmpty { get; set; } = true;
         public string Header { get; set; } = "What's New";
         public bool IncludeNewSeries { get; set; } = true;
@@ -211,6 +218,46 @@ namespace EmbyCast.Plugin.Api
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/Users/All", "GET", Summary = "List all users for the recipient checkbox list")]
     public class GetAllUsers : IReturn<List<UserOptionDto>> { }
+
+    // ---- User groups ---------------------------------------------------
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Groups", "GET", Summary = "List all user groups")]
+    public class GetGroups : IReturn<List<UserGroup>> { }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Groups", "POST", Summary = "Create a new user group")]
+    public class CreateGroup : IReturn<UserGroup>
+    {
+        public string Name { get; set; }
+        public List<string> UserIds { get; set; } = new List<string>();
+    }
+
+    // POST rather than PUT: every other write endpoint in this plugin already uses POST
+    // (there's no prior PUT usage anywhere in this codebase to follow), and this sandbox has no
+    // compiler to verify a first-time verb against this Emby SDK version - staying with a
+    // proven-working verb removes that risk for no real cost.
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Groups/{Id}", "POST", Summary = "Rename a user group and/or replace its member list")]
+    public class UpdateGroup : IReturn<UserGroup>
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public List<string> UserIds { get; set; } = new List<string>();
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Groups/{Id}", "DELETE", Summary = "Delete a user group")]
+    public class DeleteGroup : IReturn<object>
+    {
+        public string Id { get; set; }
+    }
+
+    // ---- Welcome message: bulk-mark existing users -----------------------
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Welcome/MarkExisting", "POST", Summary = "Marks every current user as already welcomed, without sending them the welcome message - so only users created from now on receive it automatically")]
+    public class MarkExistingUsersWelcomed : IReturn<object> { }
 
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/History", "GET", Summary = "List sent-message history with delivery status")]
@@ -311,7 +358,8 @@ namespace EmbyCast.Plugin.Api
         {
             var mode = ParseMode(request.RecipientMode);
             var outcome = await P.Delivery.SendAsync(
-                request.Header, request.Text, request.TimeoutMs, mode, request.UserIds, MessageOrigin.Instant
+                request.Header, request.Text, request.TimeoutMs, mode, request.UserIds, MessageOrigin.Instant,
+                specificGroupIds: request.GroupIds
             ).ConfigureAwait(false);
             return ToDto(outcome);
         }
@@ -325,7 +373,8 @@ namespace EmbyCast.Plugin.Api
                 TimeoutMs = request.TimeoutMs,
                 SendAtUtc = request.SendAtUtc,
                 RecipientMode = request.RecipientMode,
-                SpecificUserIds = request.UserIds ?? new List<string>()
+                SpecificUserIds = request.UserIds ?? new List<string>(),
+                SpecificGroupIds = request.GroupIds ?? new List<string>()
             };
             return P.Store.AddScheduled(record);
         }
@@ -344,7 +393,7 @@ namespace EmbyCast.Plugin.Api
             var mode = ParseMode(request.RecipientMode);
             return P.Timer.StartTimer(
                 request.Header, request.TextTemplate, request.TotalMinutes,
-                request.PresetMinutes, postAction, mode, request.UserIds, request.TimeoutMs);
+                request.PresetMinutes, postAction, mode, request.UserIds, request.TimeoutMs, request.GroupIds);
         }
 
         public object Post(CancelTimer request)
@@ -405,7 +454,7 @@ namespace EmbyCast.Plugin.Api
 
             var outcome = await P.Delivery.SendAsync(
                 header, text, 0, mode, request.UserIds, MessageOrigin.MediaNews,
-                webOnly: request.WebOnly
+                webOnly: request.WebOnly, specificGroupIds: request.GroupIds
             ).ConfigureAwait(false);
 
             result.SendOutcome = outcome;
@@ -524,6 +573,7 @@ namespace EmbyCast.Plugin.Api
             config.MediaNewsLibraryIdsCsv = request.LibraryIdsCsv ?? "";
             config.MediaNewsRecipientMode = request.RecipientMode;
             config.MediaNewsSpecificUserIdsCsv = request.SpecificUserIdsCsv ?? "";
+            config.MediaNewsSpecificGroupIdsCsv = request.SpecificGroupIdsCsv ?? "";
             config.MediaNewsSkipWhenEmpty = request.SkipWhenEmpty;
             config.MediaNewsHeader = string.IsNullOrWhiteSpace(request.Header) ? "What's New" : request.Header;
             config.MediaNewsIncludeNewSeries = request.IncludeNewSeries;
@@ -596,6 +646,30 @@ namespace EmbyCast.Plugin.Api
             return users.Select(u => new UserOptionDto { Id = IdNormalization.Normalize(u.Id), Name = u.Name })
                         .OrderBy(u => u.Name)
                         .ToList();
+        }
+
+        // ---- User groups ---------------------------------------------------
+
+        public object Get(GetGroups request) => P.Store.GetGroups();
+
+        public object Post(CreateGroup request) => P.Store.CreateGroup(request.Name, request.UserIds);
+
+        public object Post(UpdateGroup request) => P.Store.UpdateGroup(request.Id, request.Name, request.UserIds);
+
+        public object Delete(DeleteGroup request)
+        {
+            var ok = P.Store.DeleteGroup(request.Id);
+            return new { Success = ok };
+        }
+
+        // ---- Welcome message: bulk-mark existing users -----------------------
+
+        public object Post(MarkExistingUsersWelcomed request)
+        {
+            var userManager = P.ApplicationHost.Resolve<IUserManager>();
+            var ids = UserLookup.GetAllUsers(userManager).Select(u => IdNormalization.Normalize(u.Id));
+            var count = P.Store.MarkWelcomedBulk(ids);
+            return new { Success = true, Count = count };
         }
 
         public object Get(GetHistory request) => P.Store.GetHistory();

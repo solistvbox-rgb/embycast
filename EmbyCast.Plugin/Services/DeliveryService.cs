@@ -80,7 +80,12 @@ namespace EmbyCast.Plugin.Services
             IEnumerable<string> specificUserIds,
             MessageOrigin origin,
             DateTime? scheduledForUtc = null,
-            bool webOnly = false)
+            bool webOnly = false,
+            // Only used when mode == RecipientMode.Specific - selected user-group ids (see
+            // UserGroup), expanded to member user ids and unioned with specificUserIds below.
+            // Optional/nullable so every pre-existing positional call site (e.g. the Welcome
+            // message send, which never offers group selection) keeps compiling unchanged.
+            IEnumerable<string> specificGroupIds = null)
         {
             var outcome = new SendOutcome();
             try
@@ -150,11 +155,19 @@ namespace EmbyCast.Plugin.Services
                 }
                 else
                 {
+                    // Groups are expanded to their current member ids here, at send time - not
+                    // when the message/schedule/timer was created - so editing a group's
+                    // membership later still affects any future send that references it. Unknown
+                    // group ids (e.g. a group deleted since) simply resolve to nothing extra.
+                    var fromGroups = _store.ExpandGroupsToUserIds(specificGroupIds ?? Enumerable.Empty<string>());
+
                     // Normalize here too: ids arriving from the dashboard's checkbox list are
                     // already GUID strings, but normalizing keeps this list in the exact same
                     // canonical form as the session/user ids it gets compared against below -
-                    // see IdNormalization.cs for why that matters.
+                    // see IdNormalization.cs for why that matters. A user picked both directly
+                    // and via a group is naturally de-duplicated by the trailing Distinct().
                     targetUserIds = (specificUserIds ?? Enumerable.Empty<string>())
+                        .Concat(fromGroups)
                         .Select(IdNormalization.Normalize)
                         .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
                 }

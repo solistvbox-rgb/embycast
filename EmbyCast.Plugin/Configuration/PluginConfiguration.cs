@@ -38,6 +38,10 @@ namespace EmbyCast.Plugin.Configuration
         public string MediaNewsLibraryIdsCsv { get; set; } = "";
         public string MediaNewsRecipientMode { get; set; } = "All"; // Active | All | Specific
         public string MediaNewsSpecificUserIdsCsv { get; set; } = "";
+        /// <summary>Comma separated list of selected user-group ids (see Models.UserGroup),
+        /// same idea as MediaNewsSpecificUserIdsCsv above but for groups - resolved to member
+        /// user ids at send time by DeliveryService.SendAsync, never stored expanded here.</summary>
+        public string MediaNewsSpecificGroupIdsCsv { get; set; } = "";
         public bool MediaNewsSkipWhenEmpty { get; set; } = true;
         /// <summary>LEGACY: "NewSeries" or "NewEpisodes" - series entries used to be
         /// a single either/or choice. Superseded by the two independent

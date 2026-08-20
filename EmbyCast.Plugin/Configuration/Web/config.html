@@ -190,6 +190,34 @@
       .tile.c-welcome    { background:linear-gradient(160deg, #5fae7a, #498a60); }
       .tile.c-history    { background:linear-gradient(160deg, #4fb8c4, #3d939c); }
       .tile.c-cleanup    { background:linear-gradient(160deg, #b5954f, #91773e); }
+      .tile.c-groups     { background:linear-gradient(160deg, #5fae9a, #45947f); }
+
+      /* ---------- User Groups tile ---------- */
+      .group-item {
+        display:flex; justify-content:space-between; align-items:center; gap:1em;
+        border:1px solid var(--bcm-border); border-radius:8px; padding:.75em 1em; margin-bottom:.6em;
+        background:var(--bcm-fill);
+      }
+      .group-main { display:flex; flex-direction:column; gap:.2em; }
+      .group-name { font-weight:600; font-size:.98em; }
+      .group-members { font-size:.82em; opacity:.6; }
+      .group-actions { display:flex; gap:.5em; flex:none; }
+      .bcm-btn.small { padding:.35em .8em; font-size:.85em; }
+      .bcm-btn.danger { background:rgba(180,30,30,0.15); color:#ff8787; border:1px solid rgba(180,30,30,0.5); }
+      .group-form {
+        border:1px dashed var(--bcm-border); border-radius:8px; padding:1em 1.1em; margin-bottom:1.2em;
+        background:rgba(0,164,220,0.05); display:none;
+      }
+      .group-form.show { display:block; }
+      .group-form-title { font-size:.9em; font-weight:600; opacity:.85; margin:0 0 .8em; }
+
+      /* Two-part "Gruppen" / "Einzelne User" recipient checkbox list - used inside every
+         "Selected users & groups" .bcm-userlist (Instant/Scheduled/Timer/Media News). */
+      .userlist-subtitle { font-size:.72em; font-weight:700; text-transform:uppercase; letter-spacing:.03em; opacity:.5; margin:.5em 0 .25em; }
+      .userlist-subtitle:first-child { margin-top:0; }
+      .userlist-empty-note { font-size:.82em; opacity:.45; margin:0 0 .4em; }
+      .group-chip { font-size:.72em; opacity:.5; margin-left:.4em; }
+      .manage-groups-link { margin-left:.6em; }
 
       .open-orders { margin-top:.4em; }
       .open-orders h3 { font-size:.95em; margin:0 0 .6em; opacity:.8; font-weight:600; }
@@ -259,7 +287,7 @@
            present in the DOM (toggled via style.display), positioned immediately before all
            .bcm-section blocks so it visually precedes whichever one is visible. -->
       <div class="bcm-detail-header" id="bcmDetailHeader" style="display:none;">
-        <span class="bcm-back-link" id="bcmBackLink"><span aria-hidden="true">&larr;</span> <span data-i18n="backToOverview">Overview</span></span>
+        <span class="bcm-back-link" id="bcmBackLink"><span aria-hidden="true">&larr;</span> <span class="bcm-back-label" data-i18n="backToOverview">Overview</span></span>
         <span style="opacity:.4;">&middot;</span>
         <h2 class="bcm-detail-title" id="bcmDetailTitle">-</h2>
       </div>
@@ -301,6 +329,7 @@
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group instant-recipient-group">
             <label><input type="radio" name="instant-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="instant-recipient" value="All" /> <span data-i18n="recipientAll">All users</span></label>
@@ -345,6 +374,7 @@
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group scheduled-recipient-group">
             <label><input type="radio" name="scheduled-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="scheduled-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
@@ -418,6 +448,7 @@
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group timer-recipient-group">
             <label><input type="radio" name="timer-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="timer-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
@@ -483,6 +514,7 @@
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group medianews-recipient-group">
             <label><input type="radio" name="medianews-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="medianews-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
@@ -550,6 +582,40 @@
       </div>
       </div>
 
+      <!-- ============ USER GROUPS ============ -->
+      <div class="bcm-section" data-section="groups" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="groupsTitle">User Groups</h2>
+        <p class="bcm-desc" data-i18n="groupsDesc">Combine several users into a named group to quickly select them together as message recipients.</p>
+
+        <div class="group-list"></div>
+
+        <!-- Same form for "New group" and "Edit group" - only the title/prefilled values differ,
+             see config.js's openGroupForm(). -->
+        <div class="group-form">
+          <p class="group-form-title"></p>
+          <div class="bcm-field">
+            <label data-i18n="labelGroupName">Group name</label>
+            <input type="text" class="group-form-name" maxlength="60" />
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelGroupMembers">Members</label>
+            <div class="bcm-userlist show group-form-userlist"></div>
+          </div>
+          <div class="bcm-btnrow">
+            <button type="button" class="bcm-btn group-form-save" data-i18n="btnSaveGroup">Save</button>
+            <button type="button" class="bcm-btn secondary group-form-cancel" data-i18n="msgCancel">Cancel</button>
+          </div>
+          <div class="bcm-status group-form-status"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn group-new" data-i18n="btnNewGroup">+ New Group</button>
+        </div>
+        <div class="bcm-status groups-status"></div>
+      </div>
+      </div>
+
       <!-- ============ WELCOME MESSAGE ============ -->
       <div class="bcm-section" data-section="welcome" style="display:none;">
       <div class="bcm-card">
@@ -579,6 +645,12 @@
         </div>
         <p class="bcm-inline-note" data-i18n="noteWelcomeFirstActivation">The first time you enable this, every existing user gets the message at their next login. After that, only users logging in for the very first time receive it - editing the text or toggling it off and on again does not resend it to anyone already welcomed.</p>
         <div class="bcm-status welcome-status"></div>
+
+        <div class="bcm-btnrow" style="margin-top:1.4em;padding-top:1.2em;border-top:1px dashed var(--bcm-border);">
+          <button type="button" class="bcm-btn secondary welcome-mark-existing" data-i18n="btnMarkExistingUsers">Mark existing users as already welcomed</button>
+        </div>
+        <p class="bcm-inline-note" data-i18n="noteMarkExistingUsers">Skips every user who already exists right now, so only users created from this point on receive the welcome message. Safe to click any time, including more than once - already-marked users are simply skipped again.</p>
+        <div class="bcm-status welcome-mark-status"></div>
       </div>
       </div>
 
