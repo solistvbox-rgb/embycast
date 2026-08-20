@@ -137,7 +137,8 @@ namespace EmbyCast.Plugin.Services
                         mode,
                         scheduled.SpecificUserIds,
                         MessageOrigin.Scheduled,
-                        scheduled.SendAtUtc
+                        scheduled.SendAtUtc,
+                        specificGroupIds: scheduled.SpecificGroupIds
                     ).ConfigureAwait(false);
 
                     _store.MarkScheduledSent(scheduled.Id);

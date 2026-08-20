@@ -28,6 +28,8 @@ define(['baseView'], function (BaseView) {
             mediaNewsDesc: 'Announce recently added movies and TV shows.',
             welcomeTitle: 'Welcome Message',
             welcomeDesc: 'Automatically sent the first time a user ever logs in.',
+            groupsTitle: 'User Groups',
+            groupsDesc: 'Combine several users into a named group to quickly select them together as message recipients.',
             historyTitle: 'Status & History',
             historyDesc: "Every message this plugin has sent, with per-user delivery status. Green = delivered, yellow = pending (offline, will be delivered at next login).",
 
@@ -52,12 +54,14 @@ define(['baseView'], function (BaseView) {
             labelTime: 'Time',
             labelEnableWelcome: 'Enable welcome message',
             noteWelcomeFirstActivation: 'Existing users also receive the message the first time this is activated - after that, only new users get it automatically. Editing the text or turning it off and back on only affects newly created users.',
+            btnMarkExistingUsers: 'Mark existing users as already welcomed',
+            noteMarkExistingUsers: 'Skips every user who already exists right now, so only users created from this point on receive the welcome message. Safe to click any time, including more than once - already-marked users are simply skipped again.',
 
             placeholderMessage: 'Type your message here...',
 
             recipientActive: 'Active users',
             recipientAll: 'All users',
-            recipientSpecific: 'Selected users',
+            recipientSpecific: 'Selected users & groups',
 
             seriesModeNewSeries: 'Newly added series',
             seriesModeNewEpisodes: 'New episodes',
@@ -75,6 +79,7 @@ define(['baseView'], function (BaseView) {
             btnInstallUpdate: '⇩ Install Update',
 
             refreshUsers: '↻ Refresh user list',
+            manageGroupsLink: '✎ Manage groups',
             refreshHistory: '↻ Refresh',
             clearAllHistory: '✕ Discard all',
             presetUnit: 'min',
@@ -209,12 +214,35 @@ define(['baseView'], function (BaseView) {
             recipientShowLess: 'show less',
 
             backToOverview: 'Overview',
+            backToSection: 'Back to {0}',
             openOrdersTitle: 'Open items',
             openOrdersNone: 'Nothing pending right now.',
             openOrderTimerActive: 'Countdown active',
             openOrderEndsIn: 'ends in {0}',
             tileArrow: '→ {0}',
-            msgTileOrderSaved: 'Tile order saved.'
+            msgTileOrderSaved: 'Tile order saved.',
+
+            labelGroupName: 'Group name',
+            labelGroupMembers: 'Members',
+            btnNewGroup: '+ New Group',
+            btnEditGroup: 'Edit',
+            btnDeleteGroup: 'Delete',
+            btnSaveGroup: 'Save',
+            userlistGroupsSubtitle: 'Groups',
+            userlistUsersSubtitle: 'Individual users',
+            groupMemberCountChip: '{0} user(s)',
+            groupMembersLine: '{0} member(s): {1}',
+            msgGroupEmpty: 'No members yet.',
+            msgNoGroups: 'No groups yet.',
+            msgGroupNameRequired: 'Please enter a group name.',
+            msgGroupSaved: 'Group saved.',
+            msgGroupNotFound: 'This group no longer exists (it may have just been deleted in another tab).',
+            msgGroupDeleted: 'Group deleted.',
+            msgConfirmDeleteGroup: 'Delete group "{0}"? Any Scheduled Message or Timer that still references it will simply no longer include it - nothing else is affected.',
+            groupFormNewTitle: 'New group',
+            groupFormEditTitle: 'Edit group: {0}',
+            recipientUnknownGroup: 'Unknown group',
+            msgExistingUsersMarked: '{0} existing user(s) marked - only users created from now on will receive the welcome message.'
         },
         de: {
             pageTitle: 'EmbyCast',
@@ -231,6 +259,8 @@ define(['baseView'], function (BaseView) {
             mediaNewsDesc: 'Kündigt kürzlich hinzugefügte Filme und Serien an.',
             welcomeTitle: 'Willkommensnachricht',
             welcomeDesc: 'Wird automatisch beim allerersten Login eines Users gesendet.',
+            groupsTitle: 'User-Gruppen',
+            groupsDesc: 'Mehrere User zu einer benannten Gruppe zusammenfassen, um sie beim Versenden gemeinsam auszuwählen.',
             historyTitle: 'Status & Historie',
             historyDesc: 'Alle von diesem Plugin gesendeten Nachrichten mit Zustellstatus pro User. Grün = zugestellt, Gelb = ausstehend (offline, wird beim nächsten Login zugestellt).',
 
@@ -255,12 +285,14 @@ define(['baseView'], function (BaseView) {
             labelTime: 'Uhrzeit',
             labelEnableWelcome: 'Willkommensnachricht aktivieren',
             noteWelcomeFirstActivation: 'Bestehende User erhalten die Nachricht beim erstmaligen Aktivieren ebenfalls – danach werden die Nachrichten automatisch nur noch an neue User versendet. Textänderungen und das De- oder Aktivieren haben nach der erstmaligen Aktivierung nur noch Einfluss auf neu erstellte User.',
+            btnMarkExistingUsers: 'Bestehende User als bereits begrüsst markieren',
+            noteMarkExistingUsers: 'Überspringt alle aktuell bestehenden User, sodass die Willkommensnachricht nur noch an ab jetzt neu erstellte User geht. Kann jederzeit, auch mehrmals, gefahrlos geklickt werden – bereits markierte User werden dabei einfach übersprungen.',
 
             placeholderMessage: 'Nachricht hier eingeben...',
 
             recipientActive: 'Aktive User',
             recipientAll: 'Alle User',
-            recipientSpecific: 'Ausgewählte User',
+            recipientSpecific: 'Ausgewählte User & Gruppen',
 
             seriesModeNewSeries: 'Neu hinzugefügte Serien',
             seriesModeNewEpisodes: 'Neue Episoden',
@@ -278,6 +310,7 @@ define(['baseView'], function (BaseView) {
             btnInstallUpdate: '⇩ Update installieren',
 
             refreshUsers: '↻ User-Liste aktualisieren',
+            manageGroupsLink: '✎ Gruppen verwalten',
             refreshHistory: '↻ Aktualisieren',
             clearAllHistory: '✕ Alles verwerfen',
             presetUnit: 'Min.',
@@ -408,12 +441,35 @@ define(['baseView'], function (BaseView) {
             recipientShowLess: 'weniger anzeigen',
 
             backToOverview: 'Übersicht',
+            backToSection: 'Zurück zu {0}',
             openOrdersTitle: 'Offene Aufträge',
             openOrdersNone: 'Aktuell nichts Offenes.',
             openOrderTimerActive: 'Countdown aktiv',
             openOrderEndsIn: 'endet in {0}',
             tileArrow: '→ {0}',
-            msgTileOrderSaved: 'Kachel-Reihenfolge gespeichert.'
+            msgTileOrderSaved: 'Kachel-Reihenfolge gespeichert.',
+
+            labelGroupName: 'Gruppenname',
+            labelGroupMembers: 'Mitglieder',
+            btnNewGroup: '+ Neue Gruppe',
+            btnEditGroup: 'Bearbeiten',
+            btnDeleteGroup: 'Löschen',
+            btnSaveGroup: 'Speichern',
+            userlistGroupsSubtitle: 'Gruppen',
+            userlistUsersSubtitle: 'Einzelne User',
+            groupMemberCountChip: '{0} User',
+            groupMembersLine: '{0} Mitglied(er): {1}',
+            msgGroupEmpty: 'Noch keine Mitglieder.',
+            msgNoGroups: 'Noch keine Gruppen vorhanden.',
+            msgGroupNameRequired: 'Bitte einen Gruppennamen eingeben.',
+            msgGroupSaved: 'Gruppe gespeichert.',
+            msgGroupNotFound: 'Diese Gruppe existiert nicht mehr (evtl. gerade in einem anderen Tab gelöscht).',
+            msgGroupDeleted: 'Gruppe gelöscht.',
+            msgConfirmDeleteGroup: 'Gruppe "{0}" löschen? Eine Scheduled Message oder ein Timer, die/der noch darauf verweist, berücksichtigt sie danach einfach nicht mehr - sonst hat das keine Auswirkungen.',
+            groupFormNewTitle: 'Neue Gruppe',
+            groupFormEditTitle: 'Gruppe bearbeiten: {0}',
+            recipientUnknownGroup: 'Unbekannte Gruppe',
+            msgExistingUsersMarked: '{0} bestehende(r) User markiert - die Willkommensnachricht geht künftig nur noch an ab jetzt neu erstellte User.'
         }
     };
 
@@ -445,6 +501,7 @@ define(['baseView'], function (BaseView) {
 
         var allUsersCache = [];
         var activeSessionsCache = [];
+        var allGroupsCache = [];
         var librariesCache = [];
         var pluginConfig = null;
         var timerPollHandle = null;
@@ -693,7 +750,11 @@ define(['baseView'], function (BaseView) {
             refreshMediaNewsAutoStatus();
             renderTileGrid();
             renderOpenOrders();
-            if (currentSection) view.querySelector('#bcmDetailTitle').textContent = t(TILE_TITLE_I18N[currentSection]);
+            if (currentSection) {
+                view.querySelector('#bcmDetailTitle').textContent = t(TILE_TITLE_I18N[currentSection]);
+                updateBackLinkLabel();
+                if (currentSection === 'groups') renderGroupsList();
+            }
         }
 
         view.querySelectorAll('.bcm-langbtn').forEach(function (btn) {
@@ -787,18 +848,39 @@ define(['baseView'], function (BaseView) {
             radio.dispatchEvent(new Event('change'));
         }
 
+        // Group checkboxes are marked with the "group-checkbox" class so they can be told apart
+        // from individual-user checkboxes sharing the same list (see renderRecipientLists()
+        // below) - both are plain <input type=checkbox>, only the class differs.
         function getSelectedUserIds(prefix) {
             var list = view.querySelector('.' + prefix + '-userlist');
             if (!list) return [];
-            return Array.prototype.slice.call(list.querySelectorAll('input[type=checkbox]:checked'))
+            return Array.prototype.slice.call(list.querySelectorAll('input[type=checkbox]:checked:not(.group-checkbox)'))
                 .map(function (cb) { return cb.value; });
+        }
+
+        function getSelectedGroupIds(prefix) {
+            var list = view.querySelector('.' + prefix + '-userlist');
+            if (!list) return [];
+            return Array.prototype.slice.call(list.querySelectorAll('input.group-checkbox[type=checkbox]:checked'))
+                .map(function (cb) { return cb.value; });
+        }
+
+        // Looks up a group's display name from the shared allGroupsCache; falls back to a
+        // generic "Unknown group" label for ids that no longer resolve (e.g. a group deleted
+        // after a Scheduled Message/Timer was created referencing it).
+        function resolveGroupName(groupId) {
+            for (var i = 0; i < allGroupsCache.length; i++) {
+                if (allGroupsCache[i].Id === groupId) return allGroupsCache[i].Name;
+            }
+            return t('recipientUnknownGroup');
         }
 
         function renderRecipientLists() {
             RECIPIENT_PREFIXES.forEach(function (prefix) {
                 var list = view.querySelector('.' + prefix + '-userlist');
                 if (!list) return;
-                var previouslySelected = getSelectedUserIds(prefix);
+                var previouslySelectedUsers = getSelectedUserIds(prefix);
+                var previouslySelectedGroups = getSelectedGroupIds(prefix);
                 if (allUsersCache.length === 0) {
                     list.innerHTML = '<p style="opacity:.4;font-size:.85em;margin:0;">' + esc(t('msgNoUsers')) + '</p>';
                     return;
@@ -807,9 +889,31 @@ define(['baseView'], function (BaseView) {
                 activeSessionsCache.forEach(function (s) { activeByUserId[s.UserId] = s; });
 
                 list.innerHTML = '';
+
+                // "Gruppen" sub-section, shown only once at least one group exists - lets an
+                // admin combine one or more saved groups with individually-picked users below.
+                if (allGroupsCache.length > 0) {
+                    var groupsTitleEl = document.createElement('div');
+                    groupsTitleEl.className = 'userlist-subtitle';
+                    groupsTitleEl.textContent = t('userlistGroupsSubtitle');
+                    list.appendChild(groupsTitleEl);
+                    allGroupsCache.forEach(function (group) {
+                        var glabel = document.createElement('label');
+                        var gchecked = previouslySelectedGroups.indexOf(group.Id) !== -1;
+                        glabel.innerHTML = '<input type="checkbox" class="group-checkbox" value="' + esc(group.Id) + '"' +
+                            (gchecked ? ' checked' : '') + ' /> <span>' + esc(group.Name) + '</span>' +
+                            '<span class="group-chip">' + esc(fmt('groupMemberCountChip', group.UserIds.length)) + '</span>';
+                        list.appendChild(glabel);
+                    });
+                    var usersTitleEl = document.createElement('div');
+                    usersTitleEl.className = 'userlist-subtitle';
+                    usersTitleEl.textContent = t('userlistUsersSubtitle');
+                    list.appendChild(usersTitleEl);
+                }
+
                 allUsersCache.forEach(function (user) {
                     var label = document.createElement('label');
-                    var checked = previouslySelected.indexOf(user.Id) !== -1;
+                    var checked = previouslySelectedUsers.indexOf(user.Id) !== -1;
                     var nowPlayingHtml = '';
                     var session = activeByUserId[user.Id];
                     if (session) {
@@ -824,14 +928,21 @@ define(['baseView'], function (BaseView) {
             });
         }
 
+        // Also loads groups (not just users/sessions) - a single shared refresh keeps every
+        // recipient checkbox list AND the "User Groups" section AND the groups tile badge in
+        // sync, since group membership/naming can change from that section at any time.
         function loadUsersAndSessions() {
             return Promise.all([
                 ajax('GET', 'EmbyCast/Users/All').catch(function () { return []; }),
-                ajax('GET', 'EmbyCast/Sessions/Active').catch(function () { return []; })
+                ajax('GET', 'EmbyCast/Sessions/Active').catch(function () { return []; }),
+                ajax('GET', 'EmbyCast/Groups').catch(function () { return []; })
             ]).then(function (results) {
                 allUsersCache = results[0] || [];
                 activeSessionsCache = results[1] || [];
+                allGroupsCache = results[2] || [];
                 renderRecipientLists();
+                renderGroupsList();
+                renderTileBadges();
                 // See the race-condition note on buildRecipientLineHtml(): if the scheduled list
                 // already rendered before user data was available, re-render it now that names
                 // can actually be resolved. No-op (lastScheduledItems still null) on the very
@@ -839,6 +950,128 @@ define(['baseView'], function (BaseView) {
                 if (lastScheduledItems) renderScheduled(lastScheduledItems);
             });
         }
+
+        // ---------------- user groups ----------------
+
+        var editingGroupId = null;
+
+        function renderGroupsList() {
+            var el = view.querySelector('.group-list');
+            if (!el) return;
+            if (allGroupsCache.length === 0) {
+                el.innerHTML = '<p style="opacity:.35;font-size:.85em;margin:0;">' + esc(t('msgNoGroups')) + '</p>';
+                return;
+            }
+            el.innerHTML = '';
+            allGroupsCache.forEach(function (group) {
+                var row = document.createElement('div');
+                row.className = 'group-item';
+                var names = (group.UserIds || []).map(resolveUserName);
+                var memberText = names.length === 0
+                    ? t('msgGroupEmpty')
+                    : fmt('groupMembersLine', names.length,
+                        names.slice(0, 4).join(', ') + (names.length > 4 ? ', …' : ''));
+                row.innerHTML =
+                    '<div class="group-main"><div class="group-name"></div><div class="group-members"></div></div>' +
+                    '<div class="group-actions">' +
+                    '<button type="button" class="bcm-btn secondary small group-edit-btn">' + esc(t('btnEditGroup')) + '</button>' +
+                    '<button type="button" class="bcm-btn danger small group-delete-btn">' + esc(t('btnDeleteGroup')) + '</button>' +
+                    '</div>';
+                row.querySelector('.group-name').textContent = group.Name;
+                row.querySelector('.group-members').textContent = memberText;
+                row.querySelector('.group-edit-btn').addEventListener('click', function () { openGroupForm(group.Id); });
+                row.querySelector('.group-delete-btn').addEventListener('click', function () { deleteGroup(group.Id, group.Name); });
+                el.appendChild(row);
+            });
+        }
+
+        // Same form markup for "New group" and "Edit group" - only the title/prefilled values
+        // differ. groupId === null means "new group".
+        function openGroupForm(groupId) {
+            editingGroupId = groupId;
+            var form = view.querySelector('.group-form');
+            var title = form.querySelector('.group-form-title');
+            var nameInput = form.querySelector('.group-form-name');
+            var list = form.querySelector('.group-form-userlist');
+
+            var group = groupId ? allGroupsCache.filter(function (g) { return g.Id === groupId; })[0] : null;
+            title.textContent = group ? fmt('groupFormEditTitle', group.Name) : t('groupFormNewTitle');
+            nameInput.value = group ? group.Name : '';
+
+            list.innerHTML = '';
+            if (allUsersCache.length === 0) {
+                list.innerHTML = '<p style="opacity:.4;font-size:.85em;margin:0;">' + esc(t('msgNoUsers')) + '</p>';
+            } else {
+                var memberIds = group ? (group.UserIds || []) : [];
+                allUsersCache.forEach(function (user) {
+                    var label = document.createElement('label');
+                    var checked = memberIds.indexOf(user.Id) !== -1;
+                    label.innerHTML = '<input type="checkbox" value="' + esc(user.Id) + '"' + (checked ? ' checked' : '') + ' /> <span>' + esc(user.Name) + '</span>';
+                    list.appendChild(label);
+                });
+            }
+
+            form.classList.add('show');
+            var statusEl = form.querySelector('.group-form-status');
+            statusEl.style.display = 'none';
+            nameInput.focus();
+        }
+
+        function closeGroupForm() {
+            view.querySelector('.group-form').classList.remove('show');
+            editingGroupId = null;
+        }
+
+        view.querySelector('.group-new').addEventListener('click', function () { openGroupForm(null); });
+        view.querySelector('.group-form-cancel').addEventListener('click', closeGroupForm);
+
+        view.querySelector('.group-form-save').addEventListener('click', function () {
+            var form = view.querySelector('.group-form');
+            var statusEl = form.querySelector('.group-form-status');
+            var name = form.querySelector('.group-form-name').value.trim();
+            if (!name) { showStatus(statusEl, t('msgGroupNameRequired'), 'err'); return; }
+            var userIds = Array.prototype.slice.call(form.querySelectorAll('.group-form-userlist input[type=checkbox]:checked'))
+                .map(function (cb) { return cb.value; });
+
+            var wasEditingId = editingGroupId;
+            var request = editingGroupId
+                ? ajax('POST', 'EmbyCast/Groups/' + editingGroupId, { Id: editingGroupId, Name: name, UserIds: userIds })
+                : ajax('POST', 'EmbyCast/Groups', { Name: name, UserIds: userIds });
+
+            request.then(function (result) {
+                // The server returns null (200 OK, empty body) if the group being edited no
+                // longer exists - e.g. deleted from another browser tab in the meantime. Treat
+                // that the same as an error rather than showing a false "Group saved.".
+                if (wasEditingId && !result) {
+                    showStatus(statusEl, t('msgGroupNotFound'), 'err');
+                    loadUsersAndSessions();
+                    return;
+                }
+                closeGroupForm();
+                showStatus(view.querySelector('.groups-status'), t('msgGroupSaved'), 'ok');
+                loadUsersAndSessions();
+            }, function (err) {
+                showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
+            });
+        });
+
+        function deleteGroup(id, name) {
+            if (!window.confirm(fmt('msgConfirmDeleteGroup', name))) return;
+            ajax('DELETE', 'EmbyCast/Groups/' + id).then(function () {
+                showStatus(view.querySelector('.groups-status'), t('msgGroupDeleted'), 'ok');
+                loadUsersAndSessions();
+            }, function (err) {
+                showStatus(view.querySelector('.groups-status'), t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
+            });
+        }
+
+        // "✎ Manage groups" links inside every "Selected users & groups" recipient panel
+        // (Instant/Scheduled/Timer/Media News) - jumps straight to the "User Groups" section
+        // without losing whatever is currently being composed, and remembers where to return to
+        // (see openSection()'s returnTo param / the context-aware back-link wiring below).
+        view.querySelectorAll('.manage-groups-link').forEach(function (el) {
+            el.addEventListener('click', function () { openSection('groups', currentSection); });
+        });
 
         // Every section that offers a "Selected users" recipient mode gets its own refresh
         // link; they all call the same shared loadUsersAndSessions(), which refreshes the
@@ -926,7 +1159,8 @@ define(['baseView'], function (BaseView) {
             if (!text) { showStatus(statusEl, t('msgPleaseEnterMessage'), 'err'); return; }
             var mode = getRecipientMode('instant');
             var userIds = mode === 'Specific' ? getSelectedUserIds('instant') : [];
-            if (mode === 'Specific' && userIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
+            var groupIds = mode === 'Specific' ? getSelectedGroupIds('instant') : [];
+            if (mode === 'Specific' && userIds.length === 0 && groupIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
 
             showStatus(statusEl, t('msgSending'), 'ok');
             var btn = view.querySelector('.instant-send');
@@ -934,7 +1168,7 @@ define(['baseView'], function (BaseView) {
 
             ajax('POST', 'EmbyCast/Send', {
                 Header: header, Text: text, TimeoutMs: timeoutSec * 1000,
-                RecipientMode: mode, UserIds: userIds
+                RecipientMode: mode, UserIds: userIds, GroupIds: groupIds
             }).then(function (result) {
                 btn.disabled = false;
                 if (result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
@@ -967,11 +1201,12 @@ define(['baseView'], function (BaseView) {
             }
             var mode = getRecipientMode('scheduled');
             var userIds = mode === 'Specific' ? getSelectedUserIds('scheduled') : [];
-            if (mode === 'Specific' && userIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
+            var groupIds = mode === 'Specific' ? getSelectedGroupIds('scheduled') : [];
+            if (mode === 'Specific' && userIds.length === 0 && groupIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
 
             ajax('POST', 'EmbyCast/Schedule', {
                 Header: header, Text: text, TimeoutMs: timeoutSec * 1000,
-                SendAtUtc: sendAt.toISOString(), RecipientMode: mode, UserIds: userIds
+                SendAtUtc: sendAt.toISOString(), RecipientMode: mode, UserIds: userIds, GroupIds: groupIds
             }).then(function () {
                 showStatus(statusEl, t('msgScheduleCreated'), 'ok');
                 view.querySelector('.scheduled-header').value = t('defaultScheduledHeader');
@@ -1056,10 +1291,14 @@ define(['baseView'], function (BaseView) {
             var toText;
             if (mode === 'Specific') {
                 var ids = s.SpecificUserIds || [];
-                if (ids.length === 0) {
+                var groupIds = s.SpecificGroupIds || [];
+                if (ids.length === 0 && groupIds.length === 0) {
                     toText = '<b>' + esc(t('recipientSpecific')) + '</b>';
                 } else {
-                    var names = ids.map(resolveUserName);
+                    // Groups are listed first, each prefixed so they read as distinct from
+                    // individually-picked users in the same "+N more" list.
+                    var names = groupIds.map(function (id) { return '👥 ' + resolveGroupName(id); })
+                        .concat(ids.map(resolveUserName));
                     var shown = names.slice(0, RECIPIENT_NAMES_SHOWN_COLLAPSED);
                     toText = '<b class="bcm-recipient-names">' + esc(shown.join(', ')) + '</b>';
                     if (names.length > RECIPIENT_NAMES_SHOWN_COLLAPSED) {
@@ -1201,12 +1440,13 @@ define(['baseView'], function (BaseView) {
 
             var mode = getRecipientMode('timer');
             var userIds = mode === 'Specific' ? getSelectedUserIds('timer') : [];
-            if (mode === 'Specific' && userIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
+            var groupIds = mode === 'Specific' ? getSelectedGroupIds('timer') : [];
+            if (mode === 'Specific' && userIds.length === 0 && groupIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
 
             ajax('POST', 'EmbyCast/Timer/Start', {
                 Header: header, TextTemplate: template, TotalMinutes: total,
                 PresetMinutes: enabledPresets, PostAction: postAction,
-                RecipientMode: mode, UserIds: userIds, TimeoutMs: timeoutSec * 1000
+                RecipientMode: mode, UserIds: userIds, GroupIds: groupIds, TimeoutMs: timeoutSec * 1000
             }).then(function () {
                 showStatus(statusEl, t('msgTimerStarted'), 'ok');
                 view.querySelector('.timer-header').value = t('defaultTimerHeader');
@@ -1439,13 +1679,15 @@ define(['baseView'], function (BaseView) {
             var statusEl = view.querySelector('.medianews-status');
             var mode = getRecipientMode('medianews');
             var userIds = mode === 'Specific' ? getSelectedUserIds('medianews') : [];
-            if (mode === 'Specific' && userIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
+            var groupIds = mode === 'Specific' ? getSelectedGroupIds('medianews') : [];
+            if (mode === 'Specific' && userIds.length === 0 && groupIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
 
             setPreviewShown(view.querySelector('.medianews-preview-btn'), view.querySelector('.medianews-preview'), false);
             showStatus(statusEl, t('msgMediaNewsSending'), 'ok');
             var payload = buildMediaNewsPayload();
             payload.RecipientMode = mode;
             payload.UserIds = userIds;
+            payload.GroupIds = groupIds;
             payload.WebOnly = view.querySelector('.medianews-webonly').checked;
             ajax('POST', 'EmbyCast/MediaNews/Send', payload).then(function (result) {
                 if (result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
@@ -1526,6 +1768,7 @@ define(['baseView'], function (BaseView) {
                 LookbackDays: days, LibraryIdsCsv: getSelectedLibraryIds().join(','),
                 RecipientMode: getRecipientMode('medianews'),
                 SpecificUserIdsCsv: getSelectedUserIds('medianews').join(','),
+                SpecificGroupIdsCsv: getSelectedGroupIds('medianews').join(','),
                 SkipWhenEmpty: true,
                 Header: view.querySelector('.medianews-header').value.trim() || t('defaultMediaNewsHeader'),
                 IncludeNewSeries: getIncludeNewSeries(), IncludeNewEpisodes: getIncludeNewEpisodes(), EpisodeTemplate: getEpisodeTemplate()
@@ -1719,6 +1962,23 @@ define(['baseView'], function (BaseView) {
 
         view.querySelector('.welcome-enabled').addEventListener('change', function () {
             saveWelcomeConfig(this.checked, this.checked ? 'msgWelcomeSaved' : 'msgWelcomeDisabled');
+        });
+
+        // "Mark existing users as already welcomed" - safe/idempotent (see MessageStore.
+        // MarkWelcomedBulk), so left permanently available rather than hidden after first use:
+        // useful again any time a user hasn't logged in since it was last clicked (e.g. right
+        // after a bulk import of accounts).
+        view.querySelector('.welcome-mark-existing').addEventListener('click', function () {
+            var statusEl = view.querySelector('.welcome-mark-status');
+            var btn = this;
+            btn.disabled = true;
+            ajax('POST', 'EmbyCast/Welcome/MarkExisting').then(function (result) {
+                btn.disabled = false;
+                showStatus(statusEl, fmt('msgExistingUsersMarked', (result && result.Count) || 0), 'ok');
+            }, function (err) {
+                btn.disabled = false;
+                showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
+            });
         });
 
         // ---------------- history ----------------
@@ -1979,14 +2239,14 @@ define(['baseView'], function (BaseView) {
 
         // Order matches the previous top-to-bottom card layout, used as the default (and as the
         // fallback for any key missing from a saved TileOrderCsv - see parseTileOrder()).
-        var TILE_KEYS = ['updates', 'instant', 'scheduled', 'timer', 'medianews', 'welcome', 'history', 'cleanup'];
+        var TILE_KEYS = ['updates', 'instant', 'scheduled', 'timer', 'medianews', 'welcome', 'groups', 'history', 'cleanup'];
         var TILE_ICON_KEYS = {
             updates: 'refresh', instant: 'message', scheduled: 'calendar', timer: 'server',
-            medianews: 'speaker', welcome: 'door', history: 'history', cleanup: 'trash'
+            medianews: 'speaker', welcome: 'door', groups: 'people', history: 'history', cleanup: 'trash'
         };
         var TILE_TITLE_I18N = {
             updates: 'updatesTitle', instant: 'instantTitle', scheduled: 'scheduledTitle', timer: 'timerTitle',
-            medianews: 'mediaNewsTitle', welcome: 'welcomeTitle', history: 'historyTitle', cleanup: 'cleanupTitle'
+            medianews: 'mediaNewsTitle', welcome: 'welcomeTitle', groups: 'groupsTitle', history: 'historyTitle', cleanup: 'cleanupTitle'
         };
         // Tabler Icons (outline set, MIT licensed), inlined so no extra network request is needed
         // to render the tile grid.
@@ -1998,11 +2258,16 @@ define(['baseView'], function (BaseView) {
             speaker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a3 3 0 0 1 0 6" /><path d="M10 8v11a1 1 0 0 1 -1 1h-1a1 1 0 0 1 -1 -1v-5" /><path d="M12 8l4.524 -3.77a.9 .9 0 0 1 1.476 .692v12.156a.9 .9 0 0 1 -1.476 .692l-4.524 -3.77h-8a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h8" /></svg>',
             door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 12v.01" /><path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h6m4 10.5v7.5" /><path d="M21 7h-7m3 -3l-3 3l3 3" /></svg>',
             history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8l0 4l2 2" /><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5" /></svg>',
-            trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>'
+            trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>',
+            people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /><path d="M21 21v-2a4 4 0 0 0 -3 -3.85" /></svg>'
         };
 
         var tileOrder = TILE_KEYS.slice(); // current display order; mutated by drag & drop
         var currentSection = null; // null = grid view is showing
+        // Set only when a section was opened via a "✎ Manage groups" deep link (see
+        // openSection()'s returnTo param) - makes the back-link jump straight back to the
+        // section the admin was composing in instead of always going to the tile overview.
+        var returnToSection = null;
         var dragKey = null;
 
         // Drops any key not in TILE_KEYS (e.g. from a future downgrade, or hand-edited XML) and
@@ -2149,6 +2414,7 @@ define(['baseView'], function (BaseView) {
             setTileBadge('updates', updateAvailableFlag ? { dot: true } : null);
             var count = (lastScheduledItems || []).length;
             setTileBadge('scheduled', count > 0 ? { text: String(count) } : null);
+            setTileBadge('groups', allGroupsCache.length > 0 ? { text: String(allGroupsCache.length) } : null);
             var countdownEl = grid.querySelector('.tile[data-key="timer"] .tile-countdown');
             if (countdownEl) {
                 countdownEl.style.display = lastTimerStatus ? 'flex' : 'none';
@@ -2179,8 +2445,10 @@ define(['baseView'], function (BaseView) {
             var mode = s.RecipientMode || 'All';
             if (mode === 'Specific') {
                 var ids = s.SpecificUserIds || [];
-                if (ids.length === 0) return t('recipientSpecific');
-                var names = ids.map(resolveUserName);
+                var groupIds = s.SpecificGroupIds || [];
+                if (ids.length === 0 && groupIds.length === 0) return t('recipientSpecific');
+                var names = groupIds.map(function (id) { return '👥 ' + resolveGroupName(id); })
+                    .concat(ids.map(resolveUserName));
                 if (names.length > RECIPIENT_NAMES_SHOWN_COLLAPSED) {
                     return names.slice(0, RECIPIENT_NAMES_SHOWN_COLLAPSED).join(', ') + ' ' +
                         fmt('recipientMoreLink', names.length - RECIPIENT_NAMES_SHOWN_COLLAPSED);
@@ -2231,24 +2499,41 @@ define(['baseView'], function (BaseView) {
             });
         }
 
-        function openSection(key) {
+        // returnTo (optional): when given, the back-link shows "Back to <returnTo>" and jumps
+        // there instead of the tile overview - used by the "✎ Manage groups" deep link so
+        // editing a group from mid-composition can hop back to exactly where you were. A normal
+        // tile click never passes this, so returnToSection is cleared on any "plain" navigation.
+        function openSection(key, returnTo) {
             if (TILE_KEYS.indexOf(key) === -1) return;
             currentSection = key;
+            returnToSection = (returnTo && TILE_KEYS.indexOf(returnTo) !== -1 && returnTo !== key) ? returnTo : null;
             view.querySelector('#tileGridView').style.display = 'none';
             view.querySelectorAll('.bcm-section').forEach(function (sec) {
                 sec.style.display = (sec.getAttribute('data-section') === key) ? '' : 'none';
             });
             view.querySelector('#bcmDetailHeader').style.display = 'flex';
             view.querySelector('#bcmDetailTitle').textContent = t(TILE_TITLE_I18N[key]);
+            updateBackLinkLabel();
             window.scrollTo(0, 0);
             // Only History needs a post-open hook right now: its Expand/Collapse measurement
             // (see measureHistoryCollapse()) can't run correctly while the section was still
             // display:none, so re-run it now that it's actually visible.
             if (key === 'history') measureHistoryCollapse();
+            // Groups' member counts/names can go stale while the admin was composing elsewhere
+            // (e.g. after a group edit made via this very deep link, then navigating back in and
+            // out again) - cheap to just always re-render on open.
+            if (key === 'groups') renderGroupsList();
+        }
+
+        function updateBackLinkLabel() {
+            var labelEl = view.querySelector('#bcmBackLink .bcm-back-label');
+            if (!labelEl) return;
+            labelEl.textContent = returnToSection ? fmt('backToSection', t(TILE_TITLE_I18N[returnToSection])) : t('backToOverview');
         }
 
         function showGrid() {
             currentSection = null;
+            returnToSection = null;
             view.querySelector('#tileGridView').style.display = '';
             view.querySelectorAll('.bcm-section').forEach(function (sec) { sec.style.display = 'none'; });
             view.querySelector('#bcmDetailHeader').style.display = 'none';
@@ -2257,7 +2542,15 @@ define(['baseView'], function (BaseView) {
         }
 
         var backLinkEl = view.querySelector('#bcmBackLink');
-        if (backLinkEl) backLinkEl.addEventListener('click', showGrid);
+        if (backLinkEl) backLinkEl.addEventListener('click', function () {
+            if (returnToSection) {
+                var target = returnToSection;
+                returnToSection = null;
+                openSection(target);
+            } else {
+                showGrid();
+            }
+        });
 
         // ---------------- init ----------------
 

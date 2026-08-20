@@ -435,5 +435,100 @@ namespace EmbyCast.Plugin.Storage
                 if (_data.WelcomedUserIds.Add(userId)) Save();
             }
         }
+
+        /// <summary>Marks every given user id as already welcomed WITHOUT sending them the
+        /// welcome message - backs the dashboard's "Mark existing users" action, so enabling
+        /// Welcome Message afterwards only actually sends to users created from that point on.
+        /// Safe to call repeatedly/for a mix of already-marked and new ids (an already-marked id
+        /// is simply skipped); saves once at the end rather than once per user. Returns the
+        /// number of ids newly marked.</summary>
+        public int MarkWelcomedBulk(IEnumerable<string> userIds)
+        {
+            lock (_lock)
+            {
+                var count = 0;
+                foreach (var id in userIds ?? Enumerable.Empty<string>())
+                {
+                    if (string.IsNullOrWhiteSpace(id)) continue;
+                    if (_data.WelcomedUserIds.Add(id)) count++;
+                }
+                if (count > 0) Save();
+                return count;
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // User groups ("User-Gruppen") - flat, named lists of user ids offered as a reusable
+        // recipient selection alongside individually-picked "Specific" users. See UserGroup's
+        // doc comment for why membership is resolved dynamically (ExpandGroupsToUserIds) rather
+        // than flattened into a fixed list when a group is chosen as a recipient.
+        // ---------------------------------------------------------------
+
+        public List<UserGroup> GetGroups()
+        {
+            lock (_lock) return _data.Groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        public UserGroup CreateGroup(string name, List<string> userIds)
+        {
+            lock (_lock)
+            {
+                var group = new UserGroup
+                {
+                    Name = string.IsNullOrWhiteSpace(name) ? "Group" : name.Trim(),
+                    UserIds = (userIds ?? new List<string>()).Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                };
+                _data.Groups.Add(group);
+                Save();
+                return group;
+            }
+        }
+
+        /// <summary>Returns null if no group with this id exists (caller returns 404-equivalent).</summary>
+        public UserGroup UpdateGroup(string id, string name, List<string> userIds)
+        {
+            lock (_lock)
+            {
+                var group = _data.Groups.FirstOrDefault(g => g.Id == id);
+                if (group == null) return null;
+                if (!string.IsNullOrWhiteSpace(name)) group.Name = name.Trim();
+                group.UserIds = (userIds ?? new List<string>()).Where(uid => !string.IsNullOrWhiteSpace(uid))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                Save();
+                return group;
+            }
+        }
+
+        /// <summary>Also strips this group id from any still-pending Scheduled Message / active
+        /// Timer that references it, so a deleted group can never silently keep affecting a
+        /// future send. ExpandGroupsToUserIds already ignores unresolvable group ids defensively
+        /// too, in case this is ever bypassed (e.g. a hand-edited store file).</summary>
+        public bool DeleteGroup(string id)
+        {
+            lock (_lock)
+            {
+                var group = _data.Groups.FirstOrDefault(g => g.Id == id);
+                if (group == null) return false;
+                _data.Groups.Remove(group);
+                foreach (var s in _data.ScheduledMessages) s.SpecificGroupIds?.Remove(id);
+                if (_data.ActiveTimer != null) _data.ActiveTimer.SpecificGroupIds?.Remove(id);
+                Save();
+                return true;
+            }
+        }
+
+        /// <summary>Expands a set of group ids into the union of their current members' user
+        /// ids. Unknown/deleted group ids are silently ignored rather than treated as an error -
+        /// a send simply proceeds with whatever recipients still resolve.</summary>
+        public List<string> ExpandGroupsToUserIds(IEnumerable<string> groupIds)
+        {
+            lock (_lock)
+            {
+                var idSet = new HashSet<string>(groupIds ?? Enumerable.Empty<string>());
+                if (idSet.Count == 0) return new List<string>();
+                return _data.Groups.Where(g => idSet.Contains(g.Id)).SelectMany(g => g.UserIds).ToList();
+            }
+        }
     }
 }

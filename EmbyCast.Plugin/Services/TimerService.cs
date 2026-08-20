@@ -83,7 +83,8 @@ namespace EmbyCast.Plugin.Services
             PostTimerAction postAction,
             RecipientMode recipientMode,
             List<string> specificUserIds,
-            int timeoutMs = 0)
+            int timeoutMs = 0,
+            List<string> specificGroupIds = null)
         {
             if (totalMinutes <= 0) throw new ArgumentException("totalMinutes must be > 0");
 
@@ -116,6 +117,7 @@ namespace EmbyCast.Plugin.Services
                 PostAction = postAction.ToString(),
                 RecipientMode = recipientMode.ToString(),
                 SpecificUserIds = specificUserIds ?? new List<string>(),
+                SpecificGroupIds = specificGroupIds ?? new List<string>(),
                 Active = true
             };
             _store.SetActiveTimer(state);
@@ -205,7 +207,8 @@ namespace EmbyCast.Plugin.Services
                 var mode = Enum.TryParse<RecipientMode>(state.RecipientMode, out var m) ? m : RecipientMode.Active;
 
                 await _delivery.SendAsync(
-                    state.Header, text, state.TimeoutMs, mode, state.SpecificUserIds, MessageOrigin.Timer
+                    state.Header, text, state.TimeoutMs, mode, state.SpecificUserIds, MessageOrigin.Timer,
+                    specificGroupIds: state.SpecificGroupIds
                 ).ConfigureAwait(false);
 
                 _store.UpdateActiveTimer(s =>
@@ -243,7 +246,8 @@ namespace EmbyCast.Plugin.Services
                 var text = RenderFinalText(state.TextTemplate);
                 var mode = Enum.TryParse<RecipientMode>(state.RecipientMode, out var m) ? m : RecipientMode.Active;
                 await _delivery.SendAsync(
-                    state.Header, text, state.TimeoutMs, mode, state.SpecificUserIds, MessageOrigin.Timer
+                    state.Header, text, state.TimeoutMs, mode, state.SpecificUserIds, MessageOrigin.Timer,
+                    specificGroupIds: state.SpecificGroupIds
                 ).ConfigureAwait(false);
             }
             catch (Exception ex)
