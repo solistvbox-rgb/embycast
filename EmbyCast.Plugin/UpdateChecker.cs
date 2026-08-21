@@ -54,7 +54,12 @@ namespace EmbyCast.Plugin
     {
         private const string ApiUrl = "https://api.github.com/repos/solistvbox-rgb/embycast/releases/latest";
         private const string DllAssetName = "EmbyCast.Plugin.dll";
-        private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
+        // Raised from 1 hour to 7 days at the user's request (2026-08-20) - they don't
+        // change/update the plugin often enough for an hourly re-check to be worth the extra
+        // GitHub API calls. The manual "Check for Updates" button is unaffected: it calls
+        // InvalidateCache() first (see Plugin.InstallUpdateAsync/EmbyCastApi's manual-check
+        // route), so it always hits the API fresh regardless of this value.
+        private static readonly TimeSpan CacheTtl = TimeSpan.FromDays(7);
 
         private static UpdateCheckResult _cached;
         private static DateTime _cacheTime = DateTime.MinValue;

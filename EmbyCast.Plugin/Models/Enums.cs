@@ -41,14 +41,19 @@ namespace EmbyCast.Plugin.Models
     }
 
     /// <summary>Action to take once a countdown timer reaches zero.
-    /// NOTE: RestartServer / ShutdownServer / MaintenanceMode are marked experimental - see
+    /// NOTE: RestartServer / ShutdownServer are marked experimental - see
     /// Services/PostTimerActionExecutor.cs and the project README for details on why these
-    /// depend on the exact Emby Server build you run.</summary>
+    /// depend on the exact Emby Server build you run.
+    /// A "MaintenanceMode" option existed here through v1.2.0 - removed (2026-08-20) because it
+    /// was never actually wired to Emby's real Dashboard > General maintenance-mode toggle (it
+    /// only sent a notice message; see the removed case in PostTimerActionExecutor.cs's history),
+    /// which was misleading, and a real implementation isn't reliably possible: Emby's real
+    /// maintenance mode is a very recent (~August 2025) beta feature with no documented plugin
+    /// SDK surface to verify against.</summary>
     public enum PostTimerAction
     {
         None,
         RestartServer,
-        ShutdownServer,
-        MaintenanceMode
+        ShutdownServer
     }
 }

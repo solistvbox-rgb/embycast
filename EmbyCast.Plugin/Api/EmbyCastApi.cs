@@ -71,7 +71,7 @@ namespace EmbyCast.Plugin.Api
         public string TextTemplate { get; set; }
         public int TotalMinutes { get; set; }
         public List<int> PresetMinutes { get; set; } = new List<int>();
-        /// <summary>"None" | "RestartServer" | "ShutdownServer" | "MaintenanceMode"</summary>
+        /// <summary>"None" | "RestartServer" | "ShutdownServer"</summary>
         public string PostAction { get; set; } = "None";
         public string RecipientMode { get; set; } = "Active";
         public List<string> UserIds { get; set; } = new List<string>();
@@ -279,8 +279,12 @@ namespace EmbyCast.Plugin.Api
     public class GetStats : IReturn<StatsDto> { }
 
     [Authenticated(Roles = "Admin")]
-    [Route("/EmbyCast/CheckUpdate", "POST", Summary = "Check GitHub for the latest plugin release")]
+    [Route("/EmbyCast/CheckUpdate", "POST", Summary = "Force a fresh GitHub check for the latest plugin release, bypassing the cache - used by the manual \"Check for Updates\" button, which should always reflect the current state when explicitly clicked")]
     public class CheckUpdate : IReturn<UpdateCheckResult> { }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/CheckUpdate/Cached", "GET", Summary = "Read-only update check for the dashboard's silent per-page-load badge - reads UpdateChecker's existing cache (see CacheTtl) and never invalidates it, unlike POST CheckUpdate")]
+    public class GetCachedUpdateCheck : IReturn<UpdateCheckResult> { }
 
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/InstallUpdate", "POST", Summary = "Download and atomically install the latest plugin release")]
@@ -737,6 +741,17 @@ namespace EmbyCast.Plugin.Api
         public async Task<object> Post(CheckUpdate request)
         {
             UpdateChecker.InvalidateCache();
+            return await UpdateChecker.CheckAsync().ConfigureAwait(false);
+        }
+
+        // Deliberately does NOT call InvalidateCache() - unlike Post(CheckUpdate) above, this is
+        // hit unprompted on every single dashboard page load (silentCheckForUpdateBadge() in
+        // config.js) purely to drive the "Plugin Updates" tile's dot badge. Before this route
+        // existed, that silent check reused POST CheckUpdate and busted the cache on every page
+        // load, which meant UpdateChecker.CacheTtl never actually reduced GitHub API traffic no
+        // matter how high it was set - defeating the point of raising it from 1 hour to 7 days.
+        public async Task<object> Get(GetCachedUpdateCheck request)
+        {
             return await UpdateChecker.CheckAsync().ConfigureAwait(false);
         }
 

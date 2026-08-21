@@ -201,6 +201,27 @@ namespace EmbyCast.Plugin
                     return result;
                 }
 
+                // Defense-in-depth domain check (added 2026-08-20): check.DownloadUrl comes
+                // straight from GitHub's own API response (UpdateChecker's "browser_download_url"
+                // field), so this doesn't protect against a compromised GitHub account - the
+                // SHA-256 checksum verified below comes from that same API response, so an
+                // attacker with write access to the repo could tamper with both together anyway
+                // (see UpdateChecker.cs's class doc for that discussion). What this DOES catch is
+                // a download URL that ends up pointing somewhere unexpected due to a future bug
+                // elsewhere in the parsing/plumbing. Only the pre-redirect host is checked here -
+                // GitHub's browser_download_url itself resolves on github.com, but actually
+                // fetching it 302-redirects to a signed, rotating CDN URL (a
+                // *.githubusercontent.com-style domain) for the real file bytes; HttpClient
+                // follows that redirect automatically and correctly, so it must NOT also be
+                // whitelisted here - locking down that redirect target would break every future
+                // update the moment GitHub rotates its CDN domain.
+                if (!Uri.TryCreate(check.DownloadUrl, UriKind.Absolute, out var downloadUri) ||
+                    !string.Equals(downloadUri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Message = "Download URL did not point to github.com - refusing to install for safety.";
+                    return result;
+                }
+
                 var currentDll = typeof(Plugin).Assembly.Location;
                 if (string.IsNullOrEmpty(currentDll) || !File.Exists(currentDll))
                     currentDll = Path.Combine(ApplicationPaths.PluginsPath, "EmbyCast.Plugin.dll");

@@ -93,7 +93,6 @@ define(['baseView'], function (BaseView) {
             defaultTimerHeader: 'Server Countdown',
             defaultTimerText: 'The server will restart in {minutes} minute(s).',
             defaultTimerTextShutdown: 'The server will shut down in {minutes} minute(s).',
-            defaultTimerTextMaintenance: 'The server will enter maintenance mode in {minutes} minute(s).',
             defaultWelcomeHeader: 'Welcome!',
             defaultWelcomeText: 'Welcome to our media server - enjoy your stay!',
             defaultMediaNewsHeader: "What's New",
@@ -105,7 +104,6 @@ define(['baseView'], function (BaseView) {
             postActionNone: 'None (message only)',
             postActionRestart: 'Restart server (experimental)',
             postActionShutdown: 'Shut down server (experimental)',
-            postActionMaintenance: 'Maintenance mode notice (experimental)',
 
             dayMonday: 'Monday', dayTuesday: 'Tuesday', dayWednesday: 'Wednesday', dayThursday: 'Thursday',
             dayFriday: 'Friday', daySaturday: 'Saturday', daySunday: 'Sunday',
@@ -320,7 +318,6 @@ define(['baseView'], function (BaseView) {
             defaultTimerHeader: 'Server-Countdown',
             defaultTimerText: 'Der Server wird in {minutes} Minute(n) neu gestartet.',
             defaultTimerTextShutdown: 'Der Server wird in {minutes} Minute(n) heruntergefahren.',
-            defaultTimerTextMaintenance: 'Der Server wird in {minutes} Minute(n) in den Wartungsmodus geschaltet.',
             defaultWelcomeHeader: 'Willkommen!',
             defaultWelcomeText: 'Willkommen auf unserem Medienserver - wir wünschen dir viel Spaß!',
             defaultMediaNewsHeader: 'Neuheiten',
@@ -332,7 +329,6 @@ define(['baseView'], function (BaseView) {
             postActionNone: 'Keine (nur Nachricht)',
             postActionRestart: 'Server neu starten (experimentell)',
             postActionShutdown: 'Server herunterfahren (experimentell)',
-            postActionMaintenance: 'Wartungsmodus-Hinweis (experimentell)',
 
             dayMonday: 'Montag', dayTuesday: 'Dienstag', dayWednesday: 'Mittwoch', dayThursday: 'Donnerstag',
             dayFriday: 'Freitag', daySaturday: 'Samstag', daySunday: 'Sonntag',
@@ -631,10 +627,10 @@ define(['baseView'], function (BaseView) {
         ];
 
         // .timer-text isn't a single fixed default like the fields above - its suggested text
-        // also depends on the selected "action after countdown ends" (Restart/Shutdown/
-        // Maintenance/None; see updateTimerTextForAction below), so it's handled separately
-        // here rather than through the generic FIELD_DEFAULTS list.
-        var TIMER_TEXT_DEFAULT_KEYS = ['defaultTimerText', 'defaultTimerTextShutdown', 'defaultTimerTextMaintenance'];
+        // also depends on the selected "action after countdown ends" (Restart/Shutdown/None; see
+        // updateTimerTextForAction below), so it's handled separately here rather than through
+        // the generic FIELD_DEFAULTS list.
+        var TIMER_TEXT_DEFAULT_KEYS = ['defaultTimerText', 'defaultTimerTextShutdown'];
 
         function isTimerTextDefault(value) {
             if (!value || value.trim() === '') return true;
@@ -667,7 +663,6 @@ define(['baseView'], function (BaseView) {
             var el = view.querySelector('.timer-text');
             if (!el || !isTimerTextDefault(el.value)) return;
             if (action === 'ShutdownServer') el.value = t('defaultTimerTextShutdown');
-            else if (action === 'MaintenanceMode') el.value = t('defaultTimerTextMaintenance');
             else if (action === 'RestartServer') el.value = t('defaultTimerText');
             updateTimerPreview();
         }
@@ -683,7 +678,6 @@ define(['baseView'], function (BaseView) {
             var el = view.querySelector('.timer-text');
             if (!el) return;
             if (action === 'ShutdownServer') el.value = t('defaultTimerTextShutdown');
-            else if (action === 'MaintenanceMode') el.value = t('defaultTimerTextMaintenance');
             else if (action === 'RestartServer') el.value = t('defaultTimerText');
             else el.value = '';
             updateTimerPreview();
@@ -1139,10 +1133,11 @@ define(['baseView'], function (BaseView) {
         // touches the manual Check-for-Updates button/status text above, and never surfaces an
         // error to the admin (this runs unprompted on every page load, an admin who's offline or
         // whose GitHub check fails shouldn't see a scary error for something they didn't ask for).
-        // Cheap to call: UpdateChecker.CheckAsync() on the server caches its GitHub response for
-        // an hour, so this doesn't add a real extra GitHub request on every page load.
+        // Uses the read-only "Cached" route (GET, never invalidates) rather than the manual
+        // button's POST route - reading the existing UpdateChecker cache (see CacheTtl) instead
+        // of forcing a fresh GitHub call on every single page load.
         function silentCheckForUpdateBadge() {
-            ajax('POST', 'EmbyCast/CheckUpdate').then(function (result) {
+            ajax('GET', 'EmbyCast/CheckUpdate/Cached').then(function (result) {
                 updateAvailableFlag = !!(result && result.UpdateAvailable);
                 renderTileBadges();
             }, function () { /* ignore - badge just stays hidden */ });
@@ -2650,9 +2645,9 @@ define(['baseView'], function (BaseView) {
             refreshMediaNewsAutoStatus();
             loadCleanupStats();
             // Silent - only drives the Plugin-Updates tile's dot badge, see
-            // silentCheckForUpdateBadge() above. Cheap: the server-side check result is cached
-            // for an hour (UpdateChecker.CacheTtl), so this doesn't add a real extra GitHub
-            // request on every page load.
+            // silentCheckForUpdateBadge() above. Cheap: reads the server-side cache
+            // (UpdateChecker.CacheTtl, currently 7 days) via the read-only "Cached" route instead
+            // of forcing a fresh GitHub request on every page load.
             silentCheckForUpdateBadge();
         }
 
