@@ -217,7 +217,11 @@
       .userlist-subtitle:first-child { margin-top:0; }
       .userlist-empty-note { font-size:.82em; opacity:.45; margin:0 0 .4em; }
       .group-chip { font-size:.72em; opacity:.5; margin-left:.4em; }
-      .manage-groups-link { margin-left:.6em; }
+      /* Sits below the Active/All/Selected radio row (right under "Selected users & groups",
+         the option it's actually relevant to) rather than up next to the "Recipients" label -
+         moved here 2026-08-20 per user feedback that the old inline-next-to-label placement read
+         as unrelated to the radio choice below it. */
+      .manage-groups-link { display:block; margin:.35em 0 .8em; }
 
       .open-orders { margin-top:.4em; }
       .open-orders h3 { font-size:.95em; margin:0 0 .6em; opacity:.8; font-weight:600; }
@@ -240,7 +244,10 @@
          not just as text. */
       .bcm-back-link { display:flex; align-items:center; gap:.5em; cursor:pointer; opacity:.9; font-size:1.05em; font-weight:600; padding:.5em .9em; border-radius:8px; border:1px solid var(--bcm-border); background:var(--bcm-fill); }
       .bcm-back-link:hover { opacity:1; background:var(--bcm-fill-strong); }
-      .bcm-back-link span[aria-hidden] { font-size:1.2em; line-height:1; }
+      /* Chevron icon (SVG) instead of the old "&larr;" text glyph - replaced 2026-08-20 per user
+         feedback that the font-glyph arrow looked chunky/pixelated at this size. */
+      .bcm-back-link span[aria-hidden] { font-size:1.5em; line-height:1; display:inline-flex; }
+      .bcm-back-link svg { width:1.1em; height:1.1em; display:block; }
       .bcm-detail-title { font-size:1.3em; font-weight:700; margin:0; }
 
       /* Status/badge/history-tag text colors above are tuned for the dark theme (bright text on
@@ -287,7 +294,7 @@
            present in the DOM (toggled via style.display), positioned immediately before all
            .bcm-section blocks so it visually precedes whichever one is visible. -->
       <div class="bcm-detail-header" id="bcmDetailHeader" style="display:none;">
-        <span class="bcm-back-link" id="bcmBackLink"><span aria-hidden="true">&larr;</span> <span class="bcm-back-label" data-i18n="backToOverview">Overview</span></span>
+        <span class="bcm-back-link" id="bcmBackLink"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></span> <span class="bcm-back-label" data-i18n="backToOverview">Overview</span></span>
         <span style="opacity:.4;">&middot;</span>
         <h2 class="bcm-detail-title" id="bcmDetailTitle">-</h2>
       </div>
@@ -329,12 +336,12 @@
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group instant-recipient-group">
             <label><input type="radio" name="instant-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="instant-recipient" value="All" /> <span data-i18n="recipientAll">All users</span></label>
             <label><input type="radio" name="instant-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
           </div>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist instant-userlist"></div>
         </div>
 
@@ -374,12 +381,12 @@
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group scheduled-recipient-group">
             <label><input type="radio" name="scheduled-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="scheduled-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
             <label><input type="radio" name="scheduled-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
           </div>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist scheduled-userlist"></div>
         </div>
 
@@ -441,18 +448,17 @@
             <option value="None" data-i18n="postActionNone">None (message only)</option>
             <option value="RestartServer" data-i18n="postActionRestart">Restart server (experimental)</option>
             <option value="ShutdownServer" data-i18n="postActionShutdown">Shut down server (experimental)</option>
-            <option value="MaintenanceMode" data-i18n="postActionMaintenance">Maintenance mode notice (experimental)</option>
           </select>
           <p class="bcm-inline-note" data-i18n="postActionNote">Server actions depend on your Emby Server build and are marked experimental - see the plugin README.</p>
         </div>
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group timer-recipient-group">
             <label><input type="radio" name="timer-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="timer-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
           </div>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist timer-userlist"></div>
         </div>
 
@@ -514,12 +520,12 @@
 
         <div class="bcm-field">
           <label data-i18n="labelRecipients">Recipients</label>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-radio-group medianews-recipient-group">
             <label><input type="radio" name="medianews-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="medianews-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
             <label><input type="radio" name="medianews-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
           </div>
+          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist medianews-userlist"></div>
 
           <div class="webonly-row">

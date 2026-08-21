@@ -25,11 +25,16 @@ namespace EmbyCast.Plugin.Services
     /// "_appHost.Restart();" - that also gives you a compile-time error immediately if the SDK
     /// doesn't have it, instead of a silent runtime no-op.
     ///
-    /// "Maintenance mode" is NOT a concept the Emby Server plugin SDK exposes at all (there is
-    /// no supported API to block new playback/logins from a plugin). We implement it as a
-    /// best-effort notice-only mode: the final countdown message is sent and the event is
-    /// logged, but the server keeps accepting connections as normal. Treat this option as a
-    /// "loud announcement" rather than an actual maintenance lock.
+    /// A "MaintenanceMode" action existed here through v1.2.0 and was removed (2026-08-20): it
+    /// was never actually wired to Emby's real Dashboard > General maintenance-mode toggle (it
+    /// only sent a notice-only message and logged a warning), which a user found misleading. A
+    /// real implementation isn't reliably possible either: "maintenance mode" is NOT a concept
+    /// the plugin SDK (mediabrowser.server.core 4.8.0.80) exposes at all - Emby's actual
+    /// Dashboard toggle is a very recent (~August 2025) beta server feature with no documented,
+    /// verifiable plugin-facing property to set. Unlike Restart/Shutdown above, there's no
+    /// well-established method-name guess to fall back on via reflection here, so guessing would
+    /// risk a silent no-op. If Emby ever documents a stable API for this, re-add it as a new
+    /// PostTimerAction case following the same reflection pattern used for Restart/Shutdown.
     /// </summary>
     public static class PostTimerActionExecutor
     {
@@ -47,13 +52,6 @@ namespace EmbyCast.Plugin.Services
                 case "ShutdownServer":
                     return TryInvokeHostMethod(appHost, logger, new[] { "Shutdown", "ShutdownAsync" },
                         "Server shutdown requested via reflection.");
-
-                case "MaintenanceMode":
-                    logger.Warn("EmbyCast: MaintenanceMode is notice-only - the server " +
-                                "keeps accepting connections. There is no supported Emby plugin API " +
-                                "to actually block playback/logins.");
-                    return "Maintenance notice sent. NOTE: this does not actually block server access " +
-                           "(no supported API for that exists) - it only sends the final message.";
 
                 default:
                     logger.Warn("EmbyCast: unknown post-timer action '{0}'", action);
