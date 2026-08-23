@@ -54,7 +54,17 @@
       .bcm-presets { display:flex; gap:.5em; flex-wrap:wrap; margin-top:.6em; margin-bottom:.6em; }
       .bcm-preset-chip { padding:.35em .8em; border-radius:99px; border:1px solid var(--bcm-border); background:var(--bcm-fill-strong); font-size:.85em; cursor:pointer; }
       .bcm-preset-chip.active { background:#00a4dc; border-color:#00a4dc; color:#fff; }
-      .bcm-preview { border:1px dashed var(--bcm-border); border-radius:6px; padding:.8em 1em; font-size:.87em; opacity:.85; white-space:pre-line; margin-bottom:.8em; }
+      .bcm-preview { position:relative; border:1px dashed var(--bcm-border); border-radius:6px; padding:.8em 2.2em .8em 1em; font-size:.87em; opacity:.85; white-space:pre-line; margin-bottom:.8em; }
+      /* Small close (x) button pinned to the top-right corner of a preview box - added so a long,
+         scrolled-down preview (see max-height/overflow-y below) can always be dismissed without
+         having to scroll back up to the "Preview"/"Hide preview" toggle button above it. Built
+         fresh into the box every time toggleMediaNewsPreview() shows one (config.js), rather than
+         living in the static HTML, since the box's own text content is fully replaced on every
+         show - a static child button would just get wiped out along with it. opacity:.85 on the
+         parent .bcm-preview already dims the whole box including this button; no separate rule
+         needed for that. */
+      .bcm-preview-close { position:absolute; top:.5em; right:.5em; width:1.6em; height:1.6em; line-height:1; display:flex; align-items:center; justify-content:center; font-size:.85em; color:inherit; opacity:.6; background:none; border:1px solid var(--bcm-border); border-radius:4px; cursor:pointer; padding:0; }
+      .bcm-preview-close:hover { opacity:1; }
       /* Media News previews only (manual send, auto-send, and the upcoming auto-send card's own
          "saved settings" preview) - capped at the same height/scroll behavior as .history-list
          below, so a long list of newly added titles doesn't push the rest of the dashboard page
@@ -304,6 +314,8 @@
       <div class="bcm-card">
         <h2 data-i18n="updatesTitle">Plugin Updates</h2>
         <p class="bcm-desc" data-i18n="updatesDesc">Check GitHub for a newer version of this plugin and install it with one click.</p>
+        <p class="bcm-inline-note"><span data-i18n="updatesGithubLink">Project page:</span> <a href="https://github.com/solistvbox-rgb/embycast" target="_blank" rel="noopener noreferrer">github.com/solistvbox-rgb/embycast</a></p>
+        <p class="bcm-inline-note updates-installed-version"></p>
 
         <div class="bcm-btnrow">
           <button type="button" class="bcm-btn secondary update-check" data-i18n="btnCheckUpdate">Check for Updates</button>
@@ -657,6 +669,7 @@
         </div>
         <p class="bcm-inline-note" data-i18n="noteMarkExistingUsers">Skips every user who already exists right now, so only users created from this point on receive the welcome message. Safe to click any time, including more than once - already-marked users are simply skipped again.</p>
         <div class="bcm-status welcome-mark-status"></div>
+        <p class="bcm-inline-note welcome-mark-lastrun" style="display:none;"></p>
       </div>
       </div>
 

@@ -137,5 +137,14 @@ namespace EmbyCast.Plugin.Models
         public HashSet<string> WelcomedUserIds { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Admin-defined named user groups - see UserGroup.</summary>
         public List<UserGroup> Groups { get; set; } = new List<UserGroup>();
+        /// <summary>When the "Mark existing users as already welcomed" button was last clicked
+        /// (see MessageStore.MarkWelcomedBulk) - null if it has never been run. Overwritten on
+        /// every run, including a run that marks zero new users (everyone was already marked) -
+        /// deliberately not a history/log of every run, just the most recent one, so the admin
+        /// can see at a glance whether/when they last did this.</summary>
+        public DateTime? LastMarkExistingWelcomedUtc { get; set; }
+        /// <summary>How many users were newly marked on that last run - see
+        /// LastMarkExistingWelcomedUtc. Always set together with it (both null, or both set).</summary>
+        public int? LastMarkExistingWelcomedCount { get; set; }
     }
 }

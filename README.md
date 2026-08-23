@@ -16,6 +16,10 @@ UI and a built-in self-updater.
   or on a weekly schedule.
 - **Welcome message** for first-time logins and **offline delivery** (queued until the user next
   logs in).
+- **User groups** — save named, reusable recipient groups from your user list, then pick them
+  alongside individual users anywhere recipients are selected. Membership is resolved at send
+  time, so editing a group later also applies to any already-created scheduled message or timer
+  that still references it.
 - **Status & history** view of every sent message with per-user delivery status.
 - **Self-update** — checks GitHub Releases for a newer version and installs it with one click.
 
@@ -63,7 +67,7 @@ doesn't do (not worth the added complexity for a project with a single maintaine
 
 ## License
 
-MIT — free to use, modify and distribute.
+MIT — free to use, modify and distribute. See [LICENSE](LICENSE).
 
 ## Built with AI assistance
 

@@ -59,6 +59,32 @@ namespace EmbyCast.Plugin.Storage
             return new StoreData();
         }
 
+        /// <summary>Deletes the store file from disk - backs Plugin.OnUninstalling() (see
+        /// Plugin.cs), called when the admin uninstalls EmbyCast via Dashboard -> Plugins, so no
+        /// message history/scheduled messages/groups/welcomed-user tracking is left behind on
+        /// disk after a full uninstall. Emby's own uninstall flow only ever deletes the plugin
+        /// DLL itself, never any files a plugin created on its own - this is opt-in cleanup this
+        /// plugin does for itself. Safe to call even if the file doesn't exist (e.g. a plugin
+        /// that was installed but never actually used). Deliberately does NOT clear _data/reset
+        /// in memory - the plugin is about to be unloaded anyway, and any in-flight call already
+        /// holding a reference to _data shouldn't suddenly see it wiped out from under it.</summary>
+        public void DeleteStoreFile()
+        {
+            lock (_lock)
+            {
+                try
+                {
+                    if (File.Exists(_filePath)) File.Delete(_filePath);
+                    var tmp = _filePath + ".tmp";
+                    if (File.Exists(tmp)) File.Delete(tmp);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("EmbyCast: failed to delete store file during uninstall: {0}", ex.Message);
+                }
+            }
+        }
+
         private void Save()
         {
             try
@@ -452,8 +478,29 @@ namespace EmbyCast.Plugin.Storage
                     if (string.IsNullOrWhiteSpace(id)) continue;
                     if (_data.WelcomedUserIds.Add(id)) count++;
                 }
-                if (count > 0) Save();
+                // Record this run unconditionally - even a 0-count run (everyone was already
+                // marked) still confirms to the admin that the action actually happened just
+                // now, which is the whole point of showing it back on the dashboard (see
+                // GetLastMarkExistingWelcomed). Deliberately overwrites any previous run rather
+                // than keeping a history - only "when was this last done" is tracked.
+                _data.LastMarkExistingWelcomedUtc = DateTime.UtcNow;
+                _data.LastMarkExistingWelcomedCount = count;
+                Save();
                 return count;
+            }
+        }
+
+        /// <summary>Backs the dashboard's persistent "Wurde am ... durchgeführt" hint under the
+        /// "Mark existing users" button - lets the admin see when they last ran it (and how many
+        /// were marked) even after navigating away and back, not just in the moment right after
+        /// clicking. Both out values are null if it has never been run. Uses out params rather
+        /// than a tuple to match this class's existing style elsewhere.</summary>
+        public void GetLastMarkExistingWelcomed(out DateTime? lastRunUtc, out int? count)
+        {
+            lock (_lock)
+            {
+                lastRunUtc = _data.LastMarkExistingWelcomedUtc;
+                count = _data.LastMarkExistingWelcomedCount;
             }
         }
 

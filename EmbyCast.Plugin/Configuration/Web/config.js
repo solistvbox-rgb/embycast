@@ -19,6 +19,8 @@ define(['baseView'], function (BaseView) {
 
             updatesTitle: 'Plugin Updates',
             updatesDesc: 'Check GitHub for a newer version of this plugin and install it with one click.',
+            updatesGithubLink: 'Project page:',
+            updatesInstalledVersion: 'Installed version: v{0}',
             instantTitle: 'Instant Message',
             scheduledTitle: 'Scheduled Message',
             scheduledDesc: 'Queue a message to be sent automatically at a future date and time.',
@@ -73,6 +75,7 @@ define(['baseView'], function (BaseView) {
             btnCancelTimer: 'Cancel Timer',
             btnPreviewMediaNews: 'Show preview',
             btnHidePreview: 'Hide preview',
+            btnClosePreview: 'Close preview',
             btnSendMediaNewsNow: 'Send Media News Now',
             btnSaveAutoSettings: 'Save Auto-send Settings',
             btnCheckUpdate: 'Check for Updates',
@@ -240,7 +243,8 @@ define(['baseView'], function (BaseView) {
             groupFormNewTitle: 'New group',
             groupFormEditTitle: 'Edit group: {0}',
             recipientUnknownGroup: 'Unknown group',
-            msgExistingUsersMarked: '{0} existing user(s) marked - only users created from now on will receive the welcome message.'
+            msgExistingUsersMarked: '{0} existing user(s) marked - only users created from now on will receive the welcome message.',
+            noteMarkExistingUsersLastRun: 'Last run on {0} - {1} existing user(s) marked.'
         },
         de: {
             pageTitle: 'EmbyCast',
@@ -248,6 +252,8 @@ define(['baseView'], function (BaseView) {
 
             updatesTitle: 'Plugin-Updates',
             updatesDesc: 'Prüft auf GitHub, ob eine neuere Version dieses Plugins verfügbar ist, und installiert sie mit einem Klick.',
+            updatesGithubLink: 'Projektseite:',
+            updatesInstalledVersion: 'Installierte Version: v{0}',
             instantTitle: 'Sofortnachricht',
             scheduledTitle: 'Terminierte Nachricht',
             scheduledDesc: 'Plant eine Nachricht, die automatisch zu einem bestimmten Zeitpunkt gesendet wird.',
@@ -302,6 +308,7 @@ define(['baseView'], function (BaseView) {
             btnCancelTimer: 'Timer abbrechen',
             btnPreviewMediaNews: 'Vorschau anzeigen',
             btnHidePreview: 'Vorschau ausblenden',
+            btnClosePreview: 'Vorschau schließen',
             btnSendMediaNewsNow: 'Neuheiten jetzt senden',
             btnSaveAutoSettings: 'Automatik-Einstellungen speichern',
             btnCheckUpdate: 'Nach Updates suchen',
@@ -465,7 +472,8 @@ define(['baseView'], function (BaseView) {
             groupFormNewTitle: 'Neue Gruppe',
             groupFormEditTitle: 'Gruppe bearbeiten: {0}',
             recipientUnknownGroup: 'Unbekannte Gruppe',
-            msgExistingUsersMarked: '{0} bestehende(r) User markiert - die Willkommensnachricht geht künftig nur noch an ab jetzt neu erstellte User.'
+            msgExistingUsersMarked: '{0} bestehende(r) User markiert - die Willkommensnachricht geht künftig nur noch an ab jetzt neu erstellte User.',
+            noteMarkExistingUsersLastRun: 'Wurde am {0} durchgeführt - {1} bestehende(r) User markiert.'
         }
     };
 
@@ -744,6 +752,7 @@ define(['baseView'], function (BaseView) {
             refreshMediaNewsAutoStatus();
             renderTileGrid();
             renderOpenOrders();
+            renderInstalledVersion();
             if (currentSection) {
                 view.querySelector('#bcmDetailTitle').textContent = t(TILE_TITLE_I18N[currentSection]);
                 updateBackLinkLabel();
@@ -1128,6 +1137,10 @@ define(['baseView'], function (BaseView) {
         view.querySelector('.update-install').addEventListener('click', installUpdate);
 
         var updateAvailableFlag = false;
+        // Last CurrentVersion seen from the "Cached" update-check route, so the "Installed
+        // version: vX" line can be re-rendered (re-translated) on a language switch without
+        // firing another network request - see renderInstalledVersion()/setLanguage() below.
+        var lastKnownPluginVersion = null;
 
         // Silent check driving only the Plugin-Updates tile's "update available" dot - never
         // touches the manual Check-for-Updates button/status text above, and never surfaces an
@@ -1140,7 +1153,26 @@ define(['baseView'], function (BaseView) {
             ajax('GET', 'EmbyCast/CheckUpdate/Cached').then(function (result) {
                 updateAvailableFlag = !!(result && result.UpdateAvailable);
                 renderTileBadges();
+                // Piggy-backs on this same cached, no-side-effect check to fill in the
+                // permanent "Installed version: vX" line on the Plugin Updates card - no
+                // separate request needed, and it's already known cheap/silent-safe (see
+                // comment above) since it just reads UpdateChecker's existing cache.
+                if (result && result.CurrentVersion) {
+                    lastKnownPluginVersion = result.CurrentVersion;
+                }
+                renderInstalledVersion();
             }, function () { /* ignore - badge just stays hidden */ });
+        }
+
+        // Re-renders the "Installed version: vX" line from the last known version (set by
+        // silentCheckForUpdateBadge above) without firing a new network request - so a language
+        // switch can call this directly to re-translate the line instead of waiting for the next
+        // silent update check.
+        function renderInstalledVersion() {
+            var versionEl = view.querySelector('.updates-installed-version');
+            if (versionEl && lastKnownPluginVersion) {
+                versionEl.textContent = fmt('updatesInstalledVersion', lastKnownPluginVersion);
+            }
         }
 
         // ---------------- instant message ----------------
@@ -1657,6 +1689,19 @@ define(['baseView'], function (BaseView) {
                 }
                 statusEl.classList.remove('ok', 'err');
                 previewEl.textContent = result.Text;
+                // Small top-right "x" so a long, scrolled-down preview (see .medianews-preview's
+                // max-height/overflow-y in config.html) can always be dismissed without scrolling
+                // back up to the toggle button. Built fresh here (rather than living as static
+                // HTML) because the textContent assignment just above wipes out any previous
+                // children of previewEl - this always runs right after that, so it's never lost.
+                var closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'bcm-preview-close';
+                closeBtn.setAttribute('aria-label', t('btnClosePreview'));
+                closeBtn.title = t('btnClosePreview');
+                closeBtn.textContent = '×';
+                closeBtn.addEventListener('click', function () { setPreviewShown(btn, previewEl, false); });
+                previewEl.appendChild(closeBtn);
                 setPreviewShown(btn, previewEl, true);
             }, function (err) {
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
@@ -1963,6 +2008,27 @@ define(['baseView'], function (BaseView) {
         // MarkWelcomedBulk), so left permanently available rather than hidden after first use:
         // useful again any time a user hasn't logged in since it was last clicked (e.g. right
         // after a bulk import of accounts).
+        // Renders the persistent "Wurde am ... durchgeführt" hint under the button - unlike the
+        // status toast above (which auto-hides after a few seconds, see showStatus()), this stays
+        // visible across page reloads/navigation, so an admin coming back later can still see
+        // whether/when they last ran this. Always shows the most recent run only, never a
+        // history/log (see MessageStore.MarkWelcomedBulk) - overwritten every time this is
+        // called with fresh data, including a 0-count run.
+        function renderMarkExistingLastRun(lastRunUtc, count) {
+            var el = view.querySelector('.welcome-mark-lastrun');
+            if (!el) return;
+            if (!lastRunUtc) { el.style.display = 'none'; return; }
+            var dateText = new Date(lastRunUtc).toLocaleDateString();
+            el.textContent = fmt('noteMarkExistingUsersLastRun', dateText, count || 0);
+            el.style.display = '';
+        }
+
+        // Populate the hint from whatever was already persisted, on page load - the button
+        // itself may not have been clicked at all in this session, or ever.
+        ajax('GET', 'EmbyCast/Welcome/MarkExistingStatus').then(function (result) {
+            renderMarkExistingLastRun(result && result.LastRunUtc, result && result.Count);
+        }, function () { /* ignore - hint just stays hidden */ });
+
         view.querySelector('.welcome-mark-existing').addEventListener('click', function () {
             var statusEl = view.querySelector('.welcome-mark-status');
             var btn = this;
@@ -1970,6 +2036,7 @@ define(['baseView'], function (BaseView) {
             ajax('POST', 'EmbyCast/Welcome/MarkExisting').then(function (result) {
                 btn.disabled = false;
                 showStatus(statusEl, fmt('msgExistingUsersMarked', (result && result.Count) || 0), 'ok');
+                renderMarkExistingLastRun(result && result.LastRunUtc, result && result.Count);
             }, function (err) {
                 btn.disabled = false;
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
@@ -2670,6 +2737,47 @@ define(['baseView'], function (BaseView) {
             stopTimerPolling();
             BaseView.prototype.onPause.apply(this, arguments);
         };
+
+        // Guards against the browser's back/forward cache (bfcache) showing this exact page
+        // again, fully rendered, after the admin switched to a different (non-admin) Emby user
+        // in the meantime - e.g. Dashboard -> EmbyCast, switch user via Emby's own user picker,
+        // then the browser's Back button. A bfcache restore does not re-run this View's
+        // constructor or init() at all (the whole page, DOM and JS state included, is just
+        // pulled back out of the browser's memory as-is) - so without this, the page keeps
+        // showing as if the admin were still logged in, and only fails once they try to actually
+        // do something (every /EmbyCast/... route is [Authenticated(Roles="Admin")] - the action
+        // then correctly errors "Forbidden", but the page itself should never have been shown in
+        // the first place for a non-admin session).
+        //
+        // window.addEventListener('pageshow', ...) with event.persisted is the standard,
+        // browser-native (not Emby-specific) way to detect a bfcache restore - this.onResume
+        // above is Emby's own router-level "revisited this view without leaving the SPA" hook,
+        // which is a different scenario and doesn't reliably fire for a full bfcache restore
+        // after having left the page's browsing context entirely (e.g. via the user-switch
+        // flow). Re-uses the existing, already-idempotent getPluginConfiguration call (rather
+        // than adding a dependency on a specific User/Policy field shape) purely as an
+        // admin-only probe - a 401/403 here means the current session's user is no longer an
+        // admin, so the fix is a real reload, which lets Emby's normal (non-bfcache) page-load
+        // handling for the current user take over correctly.
+        //
+        // Self-unregisters the first time it notices its own `view` is no longer attached to the
+        // document - each EmbyCast page visit constructs a brand-new View (and thus a brand-new
+        // listener) without ever tearing down the previous one, so without this the number of
+        // stale, window-level listeners (each still holding a closure over an old, detached view)
+        // would grow by one on every single visit to this page for the lifetime of the browser
+        // tab, each one needlessly re-running on every future pageshow anywhere in the app.
+        function handleBfcacheRestore(event) {
+            if (!document.body.contains(view)) {
+                window.removeEventListener('pageshow', handleBfcacheRestore);
+                return;
+            }
+            if (!event.persisted) return;
+            ApiClient.getPluginConfiguration(PLUGIN_ID).catch(function (err) {
+                var status = err && (err.status || (err.response && err.response.status));
+                if (status === 401 || status === 403) window.location.reload();
+            });
+        }
+        window.addEventListener('pageshow', handleBfcacheRestore);
 
         init();
     }

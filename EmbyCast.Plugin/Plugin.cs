@@ -139,6 +139,44 @@ namespace EmbyCast.Plugin
             };
         }
 
+        /// <summary>
+        /// Called by Emby's InstallationManager right before it removes the plugin (Dashboard ->
+        /// Plugins -> Uninstall) - part of the standard IPlugin contract (BasePlugin&lt;T&gt;
+        /// declares it virtual specifically for this). Emby's own uninstall flow only ever
+        /// deletes the plugin's own DLL file - it does NOT touch anything else the plugin created
+        /// (see MediaBrowser/Emby's InstallationManager.UninstallPlugin), so without this override
+        /// both embycast-store.json (message history, scheduled messages, groups, welcomed-user
+        /// tracking) and the plugin's configuration XML would silently survive an uninstall,
+        /// ready to be picked up again by a future reinstall. That's Emby's deliberate default
+        /// (most plugins want settings preserved across a reinstall) but not what's wanted here -
+        /// added 2026-08 at the user's explicit request for a clean "everything gone" uninstall.
+        /// Each half is wrapped in its own try/catch so one failing (e.g. a locked file) never
+        /// blocks the other, and neither is allowed to throw out of this method - a plugin
+        /// misbehaving here should never be able to prevent Emby from completing the uninstall.
+        /// </summary>
+        public override void OnUninstalling()
+        {
+            base.OnUninstalling();
+
+            Store.DeleteStoreFile();
+
+            try
+            {
+                // "EmbyCast.Plugin.xml" is the actual, confirmed-on-a-real-installation filename
+                // Emby saves this plugin's configuration under in plugins/configurations/ (matches
+                // the assembly name, EmbyCast.Plugin.dll) - hardcoded rather than derived via
+                // reflection since the SDK version pinned here (mediabrowser.server.core 4.8.0.80)
+                // doesn't expose a ConfigurationFilePath member on IPlugin/BasePlugin to read it
+                // back from directly.
+                var configXmlPath = Path.Combine(ApplicationPaths.PluginConfigurationsPath, "EmbyCast.Plugin.xml");
+                if (File.Exists(configXmlPath)) File.Delete(configXmlPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("EmbyCast: failed to delete configuration XML during uninstall: {0}", ex.Message);
+            }
+        }
+
         /// <summary>IServerApplicationHost is protected-ish elsewhere; services that need to
         /// resolve managers on demand (fresh, not cached) receive it directly in their
         /// constructors instead of going through this property, but EmbyCastEntryPoint needs

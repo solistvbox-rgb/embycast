@@ -260,6 +260,10 @@ namespace EmbyCast.Plugin.Api
     public class MarkExistingUsersWelcomed : IReturn<object> { }
 
     [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Welcome/MarkExistingStatus", "GET", Summary = "Reads back when \"Mark existing users\" was last run and how many users were marked, if ever - backs the persistent dashboard hint (as opposed to POST MarkExisting, which performs the action itself)")]
+    public class GetMarkExistingUsersWelcomedStatus : IReturn<object> { }
+
+    [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/History", "GET", Summary = "List sent-message history with delivery status")]
     public class GetHistory : IReturn<List<HistoryEntry>> { }
 
@@ -673,7 +677,18 @@ namespace EmbyCast.Plugin.Api
             var userManager = P.ApplicationHost.Resolve<IUserManager>();
             var ids = UserLookup.GetAllUsers(userManager).Select(u => IdNormalization.Normalize(u.Id));
             var count = P.Store.MarkWelcomedBulk(ids);
-            return new { Success = true, Count = count };
+            P.Store.GetLastMarkExistingWelcomed(out var lastRunUtc, out _);
+            return new { Success = true, Count = count, LastRunUtc = lastRunUtc };
+        }
+
+        // Deliberately separate from the POST above: this only reads back the last-run info
+        // (for the persistent dashboard hint, shown again on every page load) without performing
+        // the mark-existing action itself - same "read vs. do" split already used for
+        // CheckUpdate/CheckUpdate/Cached above.
+        public object Get(GetMarkExistingUsersWelcomedStatus request)
+        {
+            P.Store.GetLastMarkExistingWelcomed(out var lastRunUtc, out var count);
+            return new { LastRunUtc = lastRunUtc, Count = count };
         }
 
         public object Get(GetHistory request) => P.Store.GetHistory();
