@@ -2733,20 +2733,35 @@ define(['baseView'], function (BaseView) {
         // Re-uses the existing, already-idempotent getPluginConfiguration call (rather than
         // adding a dependency on a specific User/Policy field shape) purely as an admin-only
         // probe - a 401/403 here means the current session's user is no longer an admin, so the
-        // fix is a real reload, which lets Emby's normal (non-cached) page-load handling for the
-        // current user take over correctly instead of this view continuing to render stale,
-        // admin-only content (every /EmbyCast/... route is [Authenticated(Roles="Admin")] - an
-        // action attempted on the stale page would otherwise only fail later with "Forbidden").
+        // fix is to navigate away from this admin-only content (every /EmbyCast/... route is
+        // [Authenticated(Roles="Admin")] - an action attempted on the stale page would otherwise
+        // only fail later with "Forbidden").
+        //
+        // Deliberately NOT window.location.reload(): live testing (2026-08-23) showed Emby's own
+        // web client intercepts same-URL reloads through the browser's Navigation API and
+        // re-renders the current hash route client-side (appRouter.sendRouteToViewManager) rather
+        // than performing a real full-document reload - since the current route is still this
+        // exact EmbyCast page, that just reconstructs this same admin-only view again, whose
+        // init() immediately re-triggers this same 401/403 detection, calling reload() again -
+        // an infinite loop (confirmed live: constant 403s in the console, page never actually
+        // changes). Navigating to a different URL - the bare app root, with no EmbyCast hash -
+        // breaks that loop: even if Emby's router intercepts this too, it has a different route
+        // to resolve and lands the current (non-admin) user on their own normal home page instead
+        // of bouncing back to this one (confirmed manually by the admin: visiting the bare
+        // server/web/index.html URL as the switched-to non-admin user correctly shows their
+        // normal start page). Built from window.location.origin/pathname rather than any
+        // hardcoded address, so this works on every installation's own server URL.
+        //
         // Returns a promise resolving to true if the session is still admin (caller may proceed),
-        // false if a reload was triggered (caller should stop, a fresh page load is already
-        // underway).
+        // false if a navigation-away was triggered (caller should stop, a fresh page load is
+        // already underway).
         function reloadIfNoLongerAdmin() {
             return ApiClient.getPluginConfiguration(PLUGIN_ID).then(function () {
                 return true;
             }).catch(function (err) {
                 var status = err && (err.status || (err.response && err.response.status));
                 if (status === 401 || status === 403) {
-                    window.location.reload();
+                    window.location.href = window.location.origin + window.location.pathname;
                     return false;
                 }
                 // Some other transient error (network hiccup, etc.) - not a sign the session lost
