@@ -2718,19 +2718,59 @@ define(['baseView'], function (BaseView) {
             silentCheckForUpdateBadge();
         }
 
+        // Guards against this page staying visible/interactive after the admin switched to a
+        // different (non-admin) Emby user and navigated back - e.g. Dashboard -> EmbyCast, switch
+        // user via Emby's own user picker, then the browser's Back button. Originally written
+        // assuming a genuine browser back/forward-cache (bfcache) restore (see the pageshow
+        // listener below), but real-world testing (2026-08-23) showed the stale page also appears
+        // this way on Emby's own built-in admin settings pages, not just EmbyCast - meaning what's
+        // actually firing in this scenario is Emby's own SPA-level "revisited this view without a
+        // real document reload" mechanism (this.onResume), not a true browser bfcache restore.
+        // The two are different browser/app mechanisms and don't reliably fire together, so this
+        // check now runs from BOTH this.onResume and the pageshow listener, whichever actually
+        // fires for a given browser/navigation path.
+        //
+        // Re-uses the existing, already-idempotent getPluginConfiguration call (rather than
+        // adding a dependency on a specific User/Policy field shape) purely as an admin-only
+        // probe - a 401/403 here means the current session's user is no longer an admin, so the
+        // fix is a real reload, which lets Emby's normal (non-cached) page-load handling for the
+        // current user take over correctly instead of this view continuing to render stale,
+        // admin-only content (every /EmbyCast/... route is [Authenticated(Roles="Admin")] - an
+        // action attempted on the stale page would otherwise only fail later with "Forbidden").
+        // Returns a promise resolving to true if the session is still admin (caller may proceed),
+        // false if a reload was triggered (caller should stop, a fresh page load is already
+        // underway).
+        function reloadIfNoLongerAdmin() {
+            return ApiClient.getPluginConfiguration(PLUGIN_ID).then(function () {
+                return true;
+            }).catch(function (err) {
+                var status = err && (err.status || (err.response && err.response.status));
+                if (status === 401 || status === 403) {
+                    window.location.reload();
+                    return false;
+                }
+                // Some other transient error (network hiccup, etc.) - not a sign the session lost
+                // admin rights, so let the caller proceed as usual rather than getting stuck.
+                return true;
+            });
+        }
+
         this.onResume = function () {
             BaseView.prototype.onResume.apply(this, arguments);
-            // Re-check in case the admin switched the Emby dashboard theme in another tab/page
-            // since this view was last active.
-            applyBackgroundAwareTheme();
-            loadUsersAndSessions();
-            loadScheduled();
-            loadHistory();
-            refreshTimerStatus();
-            refreshMediaNewsAutoStatus();
-            loadCleanupStats();
-            renderTileBadges();
-            renderOpenOrders();
+            reloadIfNoLongerAdmin().then(function (stillAdmin) {
+                if (!stillAdmin) return;
+                // Re-check in case the admin switched the Emby dashboard theme in another
+                // tab/page since this view was last active.
+                applyBackgroundAwareTheme();
+                loadUsersAndSessions();
+                loadScheduled();
+                loadHistory();
+                refreshTimerStatus();
+                refreshMediaNewsAutoStatus();
+                loadCleanupStats();
+                renderTileBadges();
+                renderOpenOrders();
+            });
         };
 
         this.onPause = function () {
@@ -2738,27 +2778,12 @@ define(['baseView'], function (BaseView) {
             BaseView.prototype.onPause.apply(this, arguments);
         };
 
-        // Guards against the browser's back/forward cache (bfcache) showing this exact page
-        // again, fully rendered, after the admin switched to a different (non-admin) Emby user
-        // in the meantime - e.g. Dashboard -> EmbyCast, switch user via Emby's own user picker,
-        // then the browser's Back button. A bfcache restore does not re-run this View's
-        // constructor or init() at all (the whole page, DOM and JS state included, is just
-        // pulled back out of the browser's memory as-is) - so without this, the page keeps
-        // showing as if the admin were still logged in, and only fails once they try to actually
-        // do something (every /EmbyCast/... route is [Authenticated(Roles="Admin")] - the action
-        // then correctly errors "Forbidden", but the page itself should never have been shown in
-        // the first place for a non-admin session).
-        //
-        // window.addEventListener('pageshow', ...) with event.persisted is the standard,
-        // browser-native (not Emby-specific) way to detect a bfcache restore - this.onResume
-        // above is Emby's own router-level "revisited this view without leaving the SPA" hook,
-        // which is a different scenario and doesn't reliably fire for a full bfcache restore
-        // after having left the page's browsing context entirely (e.g. via the user-switch
-        // flow). Re-uses the existing, already-idempotent getPluginConfiguration call (rather
-        // than adding a dependency on a specific User/Policy field shape) purely as an
-        // admin-only probe - a 401/403 here means the current session's user is no longer an
-        // admin, so the fix is a real reload, which lets Emby's normal (non-bfcache) page-load
-        // handling for the current user take over correctly.
+        // Second layer of the same guard (see reloadIfNoLongerAdmin above), for the case where a
+        // genuine browser back/forward-cache (bfcache) restore happens instead of - or in
+        // addition to - Emby's own onResume: the whole page (DOM and JS state included) is pulled
+        // back out of the browser's memory as-is, without re-running this View's constructor,
+        // init(), or necessarily onResume either. window.addEventListener('pageshow', ...) with
+        // event.persisted is the standard, browser-native way to detect that case.
         //
         // Self-unregisters the first time it notices its own `view` is no longer attached to the
         // document - each EmbyCast page visit constructs a brand-new View (and thus a brand-new
@@ -2772,10 +2797,7 @@ define(['baseView'], function (BaseView) {
                 return;
             }
             if (!event.persisted) return;
-            ApiClient.getPluginConfiguration(PLUGIN_ID).catch(function (err) {
-                var status = err && (err.status || (err.response && err.response.status));
-                if (status === 401 || status === 403) window.location.reload();
-            });
+            reloadIfNoLongerAdmin();
         }
         window.addEventListener('pageshow', handleBfcacheRestore);
 

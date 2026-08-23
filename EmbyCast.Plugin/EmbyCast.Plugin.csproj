@@ -22,7 +22,7 @@
          so leaving this unchanged after editing config.html/config.js means admins can rebuild
          and redeploy the DLL correctly and still see the OLD page until they hard-refresh /
          clear their browser cache. Bumping the version forces a fresh fetch. -->
-    <VersionPrefix>1.2.1</VersionPrefix>
+    <VersionPrefix>1.2.2</VersionPrefix>
     <VersionSuffix></VersionSuffix>
     <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
     <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
