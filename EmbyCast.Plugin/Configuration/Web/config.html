@@ -183,6 +183,13 @@
         padding:0 .4em; border:2px solid rgba(0,0,0,0.35);
       }
       .tile-badge.dot { min-width:12px; height:12px; padding:0; }
+      /* Green = the tile's automation/toggle is currently on (or, for the Timer tile, a
+         countdown is running or scheduled); grey/muted = currently off. Used by Media News,
+         Welcome Message and Scheduled Cleanup (which always show one or the other, reflecting
+         their persistent on/off config) and by Timer (which only ever shows the green variant,
+         since "off" is just its normal resting state, not a toggle to remind the admin about). */
+      .tile-badge.dot.green { background:#3ecf6d; }
+      .tile-badge.dot.muted { background:#94A3B8; }
       .tile-countdown {
         font-size:.78em; font-weight:700; letter-spacing:.02em;
         background:rgba(0,0,0,0.28); padding:.15em .55em; border-radius:99px;
@@ -227,11 +234,15 @@
       .userlist-subtitle:first-child { margin-top:0; }
       .userlist-empty-note { font-size:.82em; opacity:.45; margin:0 0 .4em; }
       .group-chip { font-size:.72em; opacity:.5; margin-left:.4em; }
-      /* Sits below the Active/All/Selected radio row (right under "Selected users & groups",
-         the option it's actually relevant to) rather than up next to the "Recipients" label -
-         moved here 2026-08-20 per user feedback that the old inline-next-to-label placement read
-         as unrelated to the radio choice below it. */
-      .manage-groups-link { display:block; margin:.35em 0 .8em; }
+      /* Sits inline as the last item of the Active/All/Selected radio row (right next to
+         "Selected users & groups", the option it's actually relevant to) - moved here 2026-08-24
+         per user feedback that the previous placement (its own block-level line below the whole
+         radio row) read as tied to the row as a whole rather than to "Selected users & groups"
+         specifically. Being a plain flex item of .bcm-radio-group (rather than nested inside that
+         label itself) means a click never also toggles the radio, while flex-wrap still lets it
+         drop to its own line on narrow widths - covering "next to" on wide screens and "directly
+         below" on narrow ones with the one placement. */
+      .manage-groups-link { display:inline-flex; align-items:center; margin:0; }
 
       .open-orders { margin-top:.4em; }
       .open-orders h3 { font-size:.95em; margin:0 0 .6em; opacity:.8; font-weight:600; }
@@ -271,10 +282,49 @@
       .bcm-light-bg .bcm-status.ok { color:#1a6b1a; }
       .bcm-light-bg .bcm-status.err { color:#8a1f1f; }
       .bcm-light-bg .bcm-history-tag { color:#05586e; }
-      .bcm-light-bg .bcm-badge.delivered { color:#1a6b1a; }
-      .bcm-light-bg .bcm-badge.pending { color:#6b5000; }
-      .bcm-light-bg .bcm-badge.failed { color:#8a1f1f; }
-      .bcm-light-bg .bcm-badge.expired { color:#555; }
+      /* Per-user delivery pills in "Status & History" (.bcm-badge, holds the username itself as
+         its text - see renderHistory() in config.js) - switched from the individual tinted
+         colors above to plain black on the light theme per explicit user feedback 2026-08-24:
+         the tinted variants (esp. the "pending" amber) still read as low-contrast against the
+         pastel pill background. Pill backgrounds/borders are untouched, dark theme is untouched
+         (kept at the tinted colors above, which read fine there against the always-dark page). */
+      .bcm-light-bg .bcm-badge.delivered,
+      .bcm-light-bg .bcm-badge.pending,
+      .bcm-light-bg .bcm-badge.failed,
+      .bcm-light-bg .bcm-badge.expired { color:#111; }
+
+      /* Plugin Updates' GitHub project-page link - previously unstyled, so it fell back to the
+         browser's default (visited) link purple, which was nearly invisible against the dark
+         theme's dark card background. Dark theme gets the same bright accent already used
+         elsewhere for links/icons on dark (.bcm-history-tag text, .webonly-icon); light theme
+         gets a plain, more traditional link blue with enough contrast against a light card. */
+      .bcm-inline-note a, .bcm-inline-note a:visited { color:#5fc9ee; }
+      .bcm-inline-note a:hover { opacity:.85; }
+      .bcm-light-bg .bcm-inline-note a, .bcm-light-bg .bcm-inline-note a:visited { color:#0066cc; }
+
+      /* Native <select> dropdown popup (Timer's "Action after countdown ends" and Media News'
+         auto-send weekday picker are the only two on this page) -
+         previously unstyled <option>s, so the popup fell back to the browser/OS default, which on
+         the dark theme showed the currently-highlighted row with a light system-accent background
+         and this page's own inherited white option text on top of it - unreadable. Giving <option>
+         its own explicit background/color (which Chromium/Edge do honor, including for the
+         highlighted row) fixes this on both themes; light theme is included too so it doesn't
+         accidentally start relying on the same OS default that just broke here. */
+      .bcm-field select option { background:#20242b; color:#eee; }
+      .bcm-field select option:checked, .bcm-field select option:hover { background:#00a4dc; color:#fff; }
+      .bcm-light-bg .bcm-field select option { background:#fff; color:#111; }
+      .bcm-light-bg .bcm-field select option:checked, .bcm-light-bg .bcm-field select option:hover { background:#00a4dc; color:#fff; }
+
+      /* "Welcome Message"'s two action buttons ("Mark existing users..." / "Reset welcomed
+         users") each paired with their own explanatory note directly underneath, side-by-side as
+         two flex columns - replaces the previous single .bcm-btnrow followed by both notes
+         stacked one after another below both buttons, which read as ambiguous about which note
+         belonged to which button (2026-08-24 user feedback). flex-wrap lets the two columns stack
+         to full width on narrow screens rather than squeezing. */
+      .welcome-action-cols { display:flex; gap:1.5em; flex-wrap:wrap; margin-top:1.4em; padding-top:1.2em; border-top:1px dashed var(--bcm-border); }
+      .welcome-action-col { flex:1 1 220px; min-width:220px; display:flex; flex-direction:column; }
+      .welcome-action-col .bcm-btn { align-self:flex-start; margin-bottom:.5em; }
+      .welcome-action-col .bcm-inline-note { margin:0 0 .4em; }
     </style>
 
     <div class="bcm-page">
@@ -352,8 +402,8 @@
             <label><input type="radio" name="instant-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="instant-recipient" value="All" /> <span data-i18n="recipientAll">All users</span></label>
             <label><input type="radio" name="instant-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           </div>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist instant-userlist"></div>
         </div>
 
@@ -397,13 +447,14 @@
             <label><input type="radio" name="scheduled-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="scheduled-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
             <label><input type="radio" name="scheduled-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           </div>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist scheduled-userlist"></div>
         </div>
 
         <div class="bcm-btnrow">
           <button type="button" class="bcm-btn scheduled-create" data-i18n="btnSchedule">Schedule Message</button>
+          <span class="bcm-refresh-link scheduled-cancel-edit" data-i18n="linkCancelEdit" style="display:none;">&#10005; Cancel edit</span>
           <span class="bcm-refresh-link scheduled-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
         </div>
         <div class="bcm-status scheduled-status"></div>
@@ -442,6 +493,16 @@
           </div>
         </div>
 
+        <div class="bcm-field timer-schedule-field">
+          <label style="display:flex;align-items:center;gap:.5em;cursor:pointer;">
+            <input type="checkbox" class="timer-schedule-enabled" />
+            <span data-i18n="labelScheduleTimer">Start later (pick a date &amp; time)</span>
+          </label>
+          <div class="timer-schedule-datetime-wrap" style="display:none;margin-top:.5em;">
+            <input type="datetime-local" class="timer-schedule-datetime" />
+          </div>
+        </div>
+
         <div class="bcm-field">
           <label data-i18n="labelPresets">Reminder minute marks</label>
           <div class="bcm-presets timer-preset-chips"></div>
@@ -469,8 +530,8 @@
           <div class="bcm-radio-group timer-recipient-group">
             <label><input type="radio" name="timer-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="timer-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           </div>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist timer-userlist"></div>
         </div>
 
@@ -480,6 +541,11 @@
           <span class="bcm-refresh-link timer-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
         </div>
         <div class="bcm-status timer-status"></div>
+
+        <div class="timer-upcoming-wrap" style="display:none;margin-top:1.4em;">
+          <h3 style="margin:0 0 .6em;font-size:.95em;opacity:.75;" data-i18n="timerUpcomingTitle">Upcoming Timer &amp; Server Countdown</h3>
+          <div class="timer-upcoming-list"></div>
+        </div>
 
         <div class="timer-visual" style="display:none;margin-top:1.2em;">
           <div class="bcm-countdown-visual timer-countdown-text">--:--:--</div>
@@ -536,8 +602,8 @@
             <label><input type="radio" name="medianews-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
             <label><input type="radio" name="medianews-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
             <label><input type="radio" name="medianews-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           </div>
-          <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
           <div class="bcm-userlist medianews-userlist"></div>
 
           <div class="webonly-row">
@@ -664,12 +730,19 @@
         <p class="bcm-inline-note" data-i18n="noteWelcomeFirstActivation">The first time you enable this, every existing user gets the message at their next login. After that, only users logging in for the very first time receive it - editing the text or toggling it off and on again does not resend it to anyone already welcomed.</p>
         <div class="bcm-status welcome-status"></div>
 
-        <div class="bcm-btnrow" style="margin-top:1.4em;padding-top:1.2em;border-top:1px dashed var(--bcm-border);">
-          <button type="button" class="bcm-btn secondary welcome-mark-existing" data-i18n="btnMarkExistingUsers">Mark existing users as already welcomed</button>
+        <div class="welcome-action-cols">
+          <div class="welcome-action-col">
+            <button type="button" class="bcm-btn secondary welcome-mark-existing" data-i18n="btnMarkExistingUsers">Mark existing users as already welcomed</button>
+            <p class="bcm-inline-note" data-i18n="noteMarkExistingUsers">Skips every user who already exists right now, so only users created from this point on receive the welcome message. Safe to click any time, including more than once - already-marked users are simply skipped again.</p>
+            <p class="bcm-inline-note welcome-mark-lastrun" style="display:none;"></p>
+          </div>
+          <div class="welcome-action-col">
+            <button type="button" class="bcm-btn secondary welcome-unmark-existing" data-i18n="btnUnmarkExistingUsers">Reset welcomed users</button>
+            <p class="bcm-inline-note" data-i18n="noteUnmarkExistingUsers">Clears the welcomed-users list and turns off "Enable welcome message", so nothing is sent out immediately. Every current user will then receive the welcome message again once you turn it back on, the next time each of them logs in.</p>
+            <p class="bcm-inline-note welcome-unmark-lastrun" style="display:none;"></p>
+          </div>
         </div>
-        <p class="bcm-inline-note" data-i18n="noteMarkExistingUsers">Skips every user who already exists right now, so only users created from this point on receive the welcome message. Safe to click any time, including more than once - already-marked users are simply skipped again.</p>
         <div class="bcm-status welcome-mark-status"></div>
-        <p class="bcm-inline-note welcome-mark-lastrun" style="display:none;"></p>
       </div>
       </div>
 

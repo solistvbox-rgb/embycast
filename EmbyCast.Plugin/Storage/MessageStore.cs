@@ -232,6 +232,32 @@ namespace EmbyCast.Plugin.Storage
             }
         }
 
+        /// <summary>Updates a still-pending scheduled message in place (same Id, so it keeps its
+        /// position/identity rather than becoming a new entry). Returns null if no such record
+        /// exists any more - covers both "wrong id" and "it already fired or was cancelled" in one
+        /// case, since MarkScheduledSent/CancelScheduled both remove the record outright rather
+        /// than flagging it (see their doc comments) - same "not found" contract as
+        /// UpdateGroup.</summary>
+        public ScheduledMessageRecord UpdateScheduled(
+            string id, string header, string text, int timeoutMs, DateTime sendAtUtc,
+            string recipientMode, List<string> userIds, List<string> groupIds)
+        {
+            lock (_lock)
+            {
+                var record = _data.ScheduledMessages.FirstOrDefault(s => s.Id == id);
+                if (record == null) return null;
+                record.Header = header;
+                record.Text = text;
+                record.TimeoutMs = timeoutMs;
+                record.SendAtUtc = sendAtUtc;
+                record.RecipientMode = recipientMode;
+                record.SpecificUserIds = userIds ?? new List<string>();
+                record.SpecificGroupIds = groupIds ?? new List<string>();
+                Save();
+                return record;
+            }
+        }
+
         /// <summary>Removes the scheduled-message record outright on cancellation, for the same
         /// reason as MarkScheduledSent above.</summary>
         public bool CancelScheduled(string id)
@@ -412,12 +438,27 @@ namespace EmbyCast.Plugin.Storage
         // Active timer
         // ---------------------------------------------------------------
 
-        public void SetActiveTimer(TimerJobState state)
+        /// <summary>Atomically claims the single timer slot: stores <paramref name="state"/> only
+        /// if the slot is currently free (no timer record at all, or a leftover record from one
+        /// that already completed/was cancelled - Active=false and ScheduledStartUtc=null, same
+        /// definition TimerService.HasActiveOrPendingTimer() uses). Returns false without
+        /// modifying anything if the slot is already actively counting down or already pending -
+        /// unlike a plain "check HasActiveOrPendingTimer(), then set it directly" pair, the check
+        /// and the write happen under the same lock acquisition, so two near-simultaneous
+        /// Start/Schedule requests (double-click, two admin tabs) can't both pass the check and
+        /// have the second one silently overwrite the first's state. The sole way to populate
+        /// ActiveTimer - there is deliberately no unconditional "just set it" sibling method, so a
+        /// future caller can't accidentally reintroduce that race.</summary>
+        public bool TryClaimTimerSlot(TimerJobState state)
         {
             lock (_lock)
             {
+                var existing = _data.ActiveTimer;
+                if (existing != null && (existing.Active || existing.ScheduledStartUtc.HasValue))
+                    return false;
                 _data.ActiveTimer = state;
                 Save();
+                return true;
             }
         }
 
@@ -490,6 +531,31 @@ namespace EmbyCast.Plugin.Storage
             }
         }
 
+        /// <summary>Clears every id from WelcomedUserIds - backs the dashboard's "Reset welcomed
+        /// users" action. Does not send anything itself; the practical effect is that every
+        /// current user will receive the welcome message again the next time they log in (same
+        /// check as a brand-new user goes through, see EmbyCastEntryPoint.OnSessionStarted), not
+        /// immediately. Deliberately does NOT touch LastMarkExistingWelcomedUtc/Count - those
+        /// track the separate "Mark existing users" action's own history, not this one. Returns
+        /// the number of ids actually cleared (0 if the set was already empty), purely for the
+        /// confirmation message shown back to the admin.</summary>
+        public int UnmarkAllWelcomed()
+        {
+            lock (_lock)
+            {
+                var count = _data.WelcomedUserIds.Count;
+                if (count > 0) _data.WelcomedUserIds.Clear();
+                // Record this run unconditionally - even a 0-count run (list was already empty)
+                // still confirms to the admin that the action actually happened just now, same
+                // reasoning as MarkWelcomedBulk above. Deliberately overwrites any previous run
+                // rather than keeping a history - only "when was this last done" is tracked.
+                _data.LastUnmarkExistingWelcomedUtc = DateTime.UtcNow;
+                _data.LastUnmarkExistingWelcomedCount = count;
+                Save();
+                return count;
+            }
+        }
+
         /// <summary>Backs the dashboard's persistent "Wurde am ... durchgeführt" hint under the
         /// "Mark existing users" button - lets the admin see when they last ran it (and how many
         /// were marked) even after navigating away and back, not just in the moment right after
@@ -501,6 +567,18 @@ namespace EmbyCast.Plugin.Storage
             {
                 lastRunUtc = _data.LastMarkExistingWelcomedUtc;
                 count = _data.LastMarkExistingWelcomedCount;
+            }
+        }
+
+        /// <summary>Backs the dashboard's persistent hint under the "Reset welcomed users"
+        /// button - mirrors GetLastMarkExistingWelcomed above but for UnmarkAllWelcomed. Both out
+        /// values are null if it has never been run.</summary>
+        public void GetLastUnmarkExistingWelcomed(out DateTime? lastRunUtc, out int? count)
+        {
+            lock (_lock)
+            {
+                lastRunUtc = _data.LastUnmarkExistingWelcomedUtc;
+                count = _data.LastUnmarkExistingWelcomedCount;
             }
         }
 

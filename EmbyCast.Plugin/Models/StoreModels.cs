@@ -125,6 +125,18 @@ namespace EmbyCast.Plugin.Models
         public bool Active { get; set; }
         public bool CompletedActionRan { get; set; }
         public string LastError { get; set; }
+        /// <summary>Countdown duration in minutes, always set. For an immediately-started timer
+        /// this is redundant with EndUtc-StartUtc, but a pending/scheduled timer (see
+        /// ScheduledStartUtc below) has no meaningful StartUtc/EndUtc yet, so the duration has
+        /// to be stored separately to compute them once it actually starts.</summary>
+        public int TotalMinutes { get; set; }
+        /// <summary>Non-null means this timer job is scheduled to start later rather than right
+        /// away: Active is false, StartUtc/EndUtc/FiredPresets are not yet meaningful, and
+        /// TimerService's periodic pending-start check (see TimerService.CheckPendingStart)
+        /// promotes it to a real running countdown once DateTime.UtcNow reaches this value -
+        /// null for an immediately-started timer (the pre-existing behavior) and cleared back to
+        /// null once a pending timer is promoted.</summary>
+        public DateTime? ScheduledStartUtc { get; set; }
     }
 
     /// <summary>Root document persisted as a single JSON file.</summary>
@@ -146,5 +158,13 @@ namespace EmbyCast.Plugin.Models
         /// <summary>How many users were newly marked on that last run - see
         /// LastMarkExistingWelcomedUtc. Always set together with it (both null, or both set).</summary>
         public int? LastMarkExistingWelcomedCount { get; set; }
+        /// <summary>When the "Reset welcomed users" button was last clicked (see
+        /// MessageStore.UnmarkAllWelcomed) - null if it has never been run. Mirrors
+        /// LastMarkExistingWelcomedUtc above but for the opposite action; overwritten on every
+        /// run, including a 0-count run (list was already empty).</summary>
+        public DateTime? LastUnmarkExistingWelcomedUtc { get; set; }
+        /// <summary>How many user ids were cleared on that last run - see
+        /// LastUnmarkExistingWelcomedUtc. Always set together with it (both null, or both set).</summary>
+        public int? LastUnmarkExistingWelcomedCount { get; set; }
     }
 }

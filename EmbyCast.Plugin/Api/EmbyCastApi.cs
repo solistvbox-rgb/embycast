@@ -63,6 +63,21 @@ namespace EmbyCast.Plugin.Api
         public string Id { get; set; }
     }
 
+    // POST rather than PUT, same reasoning as UpdateGroup below.
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Schedule/{Id}", "POST", Summary = "Update a still-pending scheduled message")]
+    public class UpdateScheduled : IReturn<ScheduledMessageRecord>
+    {
+        public string Id { get; set; }
+        public string Header { get; set; }
+        public string Text { get; set; }
+        public int TimeoutMs { get; set; }
+        public DateTime SendAtUtc { get; set; }
+        public string RecipientMode { get; set; } = "All";
+        public List<string> UserIds { get; set; } = new List<string>();
+        public List<string> GroupIds { get; set; } = new List<string>();
+    }
+
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/Timer/Start", "POST", Summary = "Start a countdown/timer broadcast")]
     public class StartTimer : IReturn<TimerStatusDto>
@@ -77,6 +92,11 @@ namespace EmbyCast.Plugin.Api
         public List<string> UserIds { get; set; } = new List<string>();
         public List<string> GroupIds { get; set; } = new List<string>();
         public int TimeoutMs { get; set; }
+        /// <summary>Optional. When set (and in the future), the timer is stored as pending and
+        /// only actually starts once this UTC time is reached, instead of immediately - the
+        /// "Start later" checkbox on the dashboard. Null/omitted (the default) preserves the
+        /// original "start right now" behavior.</summary>
+        public DateTime? ScheduledStartUtc { get; set; }
     }
 
     [Authenticated(Roles = "Admin")]
@@ -163,6 +183,13 @@ namespace EmbyCast.Plugin.Api
         /// <summary>"Active" | "All" | "Specific" - see PluginConfiguration.MediaNewsRecipientMode.</summary>
         public string RecipientMode { get; set; }
         public int LookbackDays { get; set; }
+        /// <summary>Echoes MediaNewsIncludeNewSeries/MediaNewsIncludeNewEpisodes, same reasoning
+        /// as Header/RecipientMode/LookbackDays above - lets the dashboard's saved-config
+        /// structure preview (see config.js's buildMediaNewsStructurePreviewText) know which
+        /// sections the SAVED auto-send job actually includes, without relying on the (possibly
+        /// different, unsaved) checkboxes currently sitting in the form above.</summary>
+        public bool IncludeNewSeries { get; set; }
+        public bool IncludeNewEpisodes { get; set; }
     }
 
     [Authenticated(Roles = "Admin")]
@@ -262,6 +289,14 @@ namespace EmbyCast.Plugin.Api
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/Welcome/MarkExistingStatus", "GET", Summary = "Reads back when \"Mark existing users\" was last run and how many users were marked, if ever - backs the persistent dashboard hint (as opposed to POST MarkExisting, which performs the action itself)")]
     public class GetMarkExistingUsersWelcomedStatus : IReturn<object> { }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Welcome/UnmarkAll", "POST", Summary = "Clears the welcomed-users list and turns off \"Enable welcome message\" (so nothing is sent until the admin turns it back on) - every current user will then receive the welcome message again once re-enabled, the next time each of them logs in")]
+    public class UnmarkAllWelcomed : IReturn<object> { }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Welcome/UnmarkExistingStatus", "GET", Summary = "Reads back when \"Reset welcomed users\" was last run and how many users were affected, if ever - backs the persistent dashboard hint (as opposed to POST UnmarkAll, which performs the action itself)")]
+    public class GetUnmarkExistingWelcomedStatus : IReturn<object> { }
 
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/History", "GET", Summary = "List sent-message history with delivery status")]
@@ -389,6 +424,16 @@ namespace EmbyCast.Plugin.Api
 
         public object Get(GetScheduled request) => P.Store.GetScheduled();
 
+        // Returns null (200 OK, empty body) if the message no longer exists - e.g. it already
+        // fired or was cancelled from another tab in the meantime - same "not found" contract as
+        // Post(UpdateGroup); config.js's .scheduled-create handler checks for this explicitly.
+        public object Post(UpdateScheduled request)
+        {
+            return P.Store.UpdateScheduled(
+                request.Id, request.Header, request.Text, request.TimeoutMs, request.SendAtUtc,
+                request.RecipientMode, request.UserIds, request.GroupIds);
+        }
+
         public object Delete(CancelScheduled request)
         {
             var ok = P.Store.CancelScheduled(request.Id);
@@ -397,11 +442,43 @@ namespace EmbyCast.Plugin.Api
 
         public object Post(StartTimer request)
         {
+            // The single-timer slot may already be occupied (actively counting down, or
+            // scheduled/pending) - per the admin's explicit request, a new Start/Schedule attempt
+            // in that case is blocked with a clear message instead of silently cancelling and
+            // replacing whatever already exists. Checked here as a fast, friendly pre-check (so
+            // the common case never even reaches TimerService), but TimerService.StartTimer/
+            // ScheduleTimer are what actually enforce this atomically (see
+            // MessageStore.TryClaimTimerSlot) - the InvalidOperationException catch below handles
+            // the rare race this pre-check alone can't close (two near-simultaneous requests both
+            // passing this check before either has claimed the slot), so that race also gets the
+            // same friendly response instead of an unhandled-exception error.
+            if (P.Timer.HasActiveOrPendingTimer())
+                return new { Success = false, AlreadyExists = true };
+
             var postAction = Enum.TryParse<PostTimerAction>(request.PostAction, out var pa) ? pa : PostTimerAction.None;
             var mode = ParseMode(request.RecipientMode);
-            return P.Timer.StartTimer(
-                request.Header, request.TextTemplate, request.TotalMinutes,
-                request.PresetMinutes, postAction, mode, request.UserIds, request.TimeoutMs, request.GroupIds);
+
+            try
+            {
+                if (request.ScheduledStartUtc.HasValue && request.ScheduledStartUtc.Value > DateTime.UtcNow)
+                {
+                    return P.Timer.ScheduleTimer(
+                        request.Header, request.TextTemplate, request.TotalMinutes,
+                        request.PresetMinutes, postAction, mode, request.UserIds,
+                        request.ScheduledStartUtc.Value, request.TimeoutMs, request.GroupIds);
+                }
+
+                // ScheduledStartUtc omitted, or set to a time that's already in the past (e.g.
+                // clock skew between browser and server, or a stale form) - gracefully falls back
+                // to starting immediately rather than erroring.
+                return P.Timer.StartTimer(
+                    request.Header, request.TextTemplate, request.TotalMinutes,
+                    request.PresetMinutes, postAction, mode, request.UserIds, request.TimeoutMs, request.GroupIds);
+            }
+            catch (InvalidOperationException)
+            {
+                return new { Success = false, AlreadyExists = true };
+            }
         }
 
         public object Post(CancelTimer request)
@@ -566,7 +643,9 @@ namespace EmbyCast.Plugin.Api
                     DateTime.UtcNow, config.MediaNewsAutoSendDay, config.MediaNewsAutoSendHour, config.MediaNewsAutoSendMinute),
                 Header = config.MediaNewsHeader,
                 RecipientMode = config.MediaNewsRecipientMode,
-                LookbackDays = config.MediaNewsLookbackDays
+                LookbackDays = config.MediaNewsLookbackDays,
+                IncludeNewSeries = config.MediaNewsIncludeNewSeries,
+                IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes
             };
         }
 
@@ -600,7 +679,9 @@ namespace EmbyCast.Plugin.Api
                     DateTime.UtcNow, config.MediaNewsAutoSendDay, config.MediaNewsAutoSendHour, config.MediaNewsAutoSendMinute),
                 Header = config.MediaNewsHeader,
                 RecipientMode = config.MediaNewsRecipientMode,
-                LookbackDays = config.MediaNewsLookbackDays
+                LookbackDays = config.MediaNewsLookbackDays,
+                IncludeNewSeries = config.MediaNewsIncludeNewSeries,
+                IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes
             };
         }
 
@@ -688,6 +769,36 @@ namespace EmbyCast.Plugin.Api
         public object Get(GetMarkExistingUsersWelcomedStatus request)
         {
             P.Store.GetLastMarkExistingWelcomed(out var lastRunUtc, out var count);
+            return new { LastRunUtc = lastRunUtc, Count = count };
+        }
+
+        // Deliberately the opposite of MarkExistingUsersWelcomed above: clears the welcomed-users
+        // list entirely, so every current user is treated as never-welcomed again. Does not send
+        // anything itself - see MessageStore.UnmarkAllWelcomed's doc comment for why that matters
+        // (the welcome message only actually goes out the next time each affected user logs in).
+        // Also turns "Enable welcome message" off as part of the reset - otherwise every current
+        // user would receive the welcome message the moment they next log in, which reads as an
+        // accidental mass-send rather than the deliberate re-opt-in a "reset" implies. The admin
+        // turns it back on explicitly (same switch as always) once they're ready.
+        public object Post(UnmarkAllWelcomed request)
+        {
+            var count = P.Store.UnmarkAllWelcomed();
+            P.Store.GetLastUnmarkExistingWelcomed(out var lastRunUtc, out _);
+
+            var config = P.Configuration;
+            var wasEnabled = config.WelcomeMessageEnabled;
+            config.WelcomeMessageEnabled = false;
+            P.PersistConfiguration(config);
+
+            return new { Success = true, Count = count, LastRunUtc = lastRunUtc, WasEnabled = wasEnabled };
+        }
+
+        // Deliberately separate from the POST above: this only reads back the last-run info (for
+        // the persistent dashboard hint, shown again on every page load) without performing the
+        // reset action itself - same "read vs. do" split as GetMarkExistingUsersWelcomedStatus.
+        public object Get(GetUnmarkExistingWelcomedStatus request)
+        {
+            P.Store.GetLastUnmarkExistingWelcomed(out var lastRunUtc, out var count);
             return new { LastRunUtc = lastRunUtc, Count = count };
         }
 

@@ -64,13 +64,25 @@ namespace EmbyCast.Plugin
                 _logger.Warn("EmbyCast: ISessionManager not available; offline delivery and welcome messages are disabled.");
             }
 
+            // A timer that was actively counting down when the server last stopped needs its
+            // background run-loop task relaunched explicitly - see TimerService.
+            // ResumeAfterRestart's doc comment for why (the in-memory task that drives preset
+            // reminders/the final message/post-action only ever existed in the previous
+            // process). A pending/scheduled-for-later timer doesn't need this: it's picked up
+            // automatically by ScheduledMessageBackgroundService's periodic CheckPendingStart()
+            // poll below once its start time arrives, same as if the server hadn't restarted.
+            plugin.Timer.ResumeAfterRestart();
+
             // Offline-queue expiry and history cleanup ("Geplante Reinigung") now run
             // periodically from within ScheduledMessageBackgroundService's own loop instead of
             // once here at startup, so a long-running server without a restart still gets
-            // cleaned up on schedule.
+            // cleaned up on schedule. That same loop also drives TimerService.CheckPendingStart()
+            // (see ScheduledMessageBackgroundService.RunLoopAsync) - passed in here rather than
+            // given its own polling loop, since a 20s-granularity check is more than fine for
+            // "has this scheduled timer's start time arrived yet".
             _scheduledCts = new CancellationTokenSource();
             var scheduledService = new ScheduledMessageBackgroundService(
-                plugin.Delivery, plugin.Store, _logManager, () => plugin.Configuration);
+                plugin.Delivery, plugin.Store, plugin.Timer, _logManager, () => plugin.Configuration);
             _ = Task.Run(() => scheduledService.RunLoopAsync(_scheduledCts.Token), _scheduledCts.Token);
 
             _mediaNewsCts = new CancellationTokenSource();

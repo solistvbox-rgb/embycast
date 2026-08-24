@@ -30,6 +30,7 @@ namespace EmbyCast.Plugin.Services
 
         private readonly DeliveryService _delivery;
         private readonly MessageStore _store;
+        private readonly TimerService _timer;
         private readonly ILogger _logger;
         private readonly Func<PluginConfiguration> _getConfig;
         private DateTime _lastCleanupUtc = DateTime.MinValue;
@@ -37,11 +38,13 @@ namespace EmbyCast.Plugin.Services
         public ScheduledMessageBackgroundService(
             DeliveryService delivery,
             MessageStore store,
+            TimerService timer,
             ILogManager logManager,
             Func<PluginConfiguration> getConfig)
         {
             _delivery = delivery;
             _store = store;
+            _timer = timer;
             _logger = logManager.GetLogger(nameof(ScheduledMessageBackgroundService));
             _getConfig = getConfig;
         }
@@ -58,6 +61,20 @@ namespace EmbyCast.Plugin.Services
                 catch (Exception ex)
                 {
                     _logger.Error("EmbyCast: scheduled-message loop iteration failed: {0}", ex.Message);
+                }
+
+                // Piggybacks on this same 20s poll rather than running its own separate loop -
+                // checking whether a pending/scheduled Timer job (see TimerService.ScheduleTimer)
+                // has reached its start time is cheap enough not to need its own thread, and this
+                // loop already exists and ticks at a fine enough granularity for a "start a
+                // countdown" feature (not a hard real-time requirement).
+                try
+                {
+                    _timer?.CheckPendingStart();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("EmbyCast: pending-timer check failed: {0}", ex.Message);
                 }
 
                 try

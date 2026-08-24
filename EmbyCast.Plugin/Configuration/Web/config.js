@@ -43,6 +43,7 @@ define(['baseView'], function (BaseView) {
             labelRecipients: 'Recipients',
             labelDateTime: 'Date & time',
             labelTotalMinutes: 'Total countdown (minutes)',
+            labelScheduleTimer: 'Start later (pick a date & time)',
             labelPresets: 'Reminder minute marks',
             labelPreview: 'Preview',
             labelPostAction: 'Action after countdown ends',
@@ -58,6 +59,8 @@ define(['baseView'], function (BaseView) {
             noteWelcomeFirstActivation: 'Existing users also receive the message the first time this is activated - after that, only new users get it automatically. Editing the text or turning it off and back on only affects newly created users.',
             btnMarkExistingUsers: 'Mark existing users as already welcomed',
             noteMarkExistingUsers: 'Skips every user who already exists right now, so only users created from this point on receive the welcome message. Safe to click any time, including more than once - already-marked users are simply skipped again.',
+            btnUnmarkExistingUsers: 'Reset welcomed users',
+            noteUnmarkExistingUsers: 'Clears the welcomed-users list and turns off "Enable welcome message", so nothing is sent out immediately. Every current user will then receive the welcome message again once you turn it back on, the next time each of them logs in.',
 
             placeholderMessage: 'Type your message here...',
 
@@ -71,7 +74,10 @@ define(['baseView'], function (BaseView) {
 
             btnSendNow: 'Send Now',
             btnSchedule: 'Schedule Message',
+            btnSaveScheduleChanges: 'Save Changes',
+            btnEditScheduled: 'Edit',
             btnStartTimer: 'Start Timer',
+            btnScheduleTimer: 'Schedule Timer',
             btnCancelTimer: 'Cancel Timer',
             btnPreviewMediaNews: 'Show preview',
             btnHidePreview: 'Hide preview',
@@ -85,6 +91,7 @@ define(['baseView'], function (BaseView) {
             manageGroupsLink: '✎ Manage groups',
             refreshHistory: '↻ Refresh',
             clearAllHistory: '✕ Discard all',
+            linkCancelEdit: '✕ Cancel edit',
             presetUnit: 'min',
 
             // Suggested/default text that ships in the form fields (not just static labels).
@@ -126,12 +133,19 @@ define(['baseView'], function (BaseView) {
             msgPleaseSetDateTime: 'Please choose a date and time in the future.',
             msgSent: 'Sent - {0} delivered, {1} pending, {2} failed.',
             msgScheduleCreated: 'Message scheduled.',
+            msgScheduleUpdated: 'Message updated.',
+            msgScheduleNotFound: 'This message no longer exists (it may have already been sent or cancelled in another tab).',
             msgScheduleCancelled: 'Scheduled message cancelled.',
             msgConfirmCancelSchedule: 'Cancel this scheduled message?',
             msgTimerStarted: 'Timer started.',
+            msgTimerScheduled: 'Timer scheduled.',
             msgTimerCancelled: 'Timer cancelled.',
             msgTimerNoneActive: 'No active timer.',
             msgTimerInvalidTotal: 'Total countdown minutes must be greater than 0.',
+            msgTimerAlreadyExists: 'A timer is already running or scheduled - cancel it first.',
+            timerUpcomingTitle: 'Upcoming Timer & Server Countdown',
+            timerStartsAt: 'Starts at {0}',
+            openOrderTimerScheduled: 'Countdown scheduled',
             msgMediaNewsSending: 'Building and sending media news…',
             msgMediaNewsPreviewing: 'Building preview…',
             msgMediaNewsPreviewEmpty: 'No new media in the selected period - nothing would be sent.',
@@ -244,7 +258,17 @@ define(['baseView'], function (BaseView) {
             groupFormEditTitle: 'Edit group: {0}',
             recipientUnknownGroup: 'Unknown group',
             msgExistingUsersMarked: '{0} existing user(s) marked - only users created from now on will receive the welcome message.',
-            noteMarkExistingUsersLastRun: 'Last run on {0} - {1} existing user(s) marked.'
+            noteMarkExistingUsersLastRun: 'Last run on {0} - {1} existing user(s) marked.',
+            msgConfirmUnmarkExisting: 'Reset the welcomed-users list and turn off "Enable welcome message"? Every current user will receive the welcome message again once you turn it back on - not immediately, but the next time each of them logs in.',
+            msgExistingUsersUnmarked: '{0} user(s) reset - they will receive the welcome message again once you turn "Enable welcome message" back on.',
+            noteUnmarkExistingUsersLastRun: 'Last run on {0} - {1} user(s) restored.',
+
+            mediaNewsStructureMovies: 'New Movies:',
+            mediaNewsStructureSeries: 'New TV Shows:',
+            mediaNewsStructureEpisodes: 'New Episodes:',
+            mediaNewsStructureMoviesLine: '- shows Movies added in the last {0} days',
+            mediaNewsStructureSeriesLine: '- shows TV Shows added in the last {0} days',
+            mediaNewsStructureEpisodesLine: '- shows new Episodes added in the last {0} days'
         },
         de: {
             pageTitle: 'EmbyCast',
@@ -276,6 +300,7 @@ define(['baseView'], function (BaseView) {
             labelRecipients: 'Empfänger',
             labelDateTime: 'Datum & Uhrzeit',
             labelTotalMinutes: 'Gesamter Countdown (Minuten)',
+            labelScheduleTimer: 'Später starten (Datum & Uhrzeit wählen)',
             labelPresets: 'Erinnerungs-Minutenmarken',
             labelPreview: 'Vorschau',
             labelPostAction: 'Aktion nach Ablauf des Countdowns',
@@ -291,6 +316,8 @@ define(['baseView'], function (BaseView) {
             noteWelcomeFirstActivation: 'Bestehende User erhalten die Nachricht beim erstmaligen Aktivieren ebenfalls – danach werden die Nachrichten automatisch nur noch an neue User versendet. Textänderungen und das De- oder Aktivieren haben nach der erstmaligen Aktivierung nur noch Einfluss auf neu erstellte User.',
             btnMarkExistingUsers: 'Bestehende User als bereits begrüsst markieren',
             noteMarkExistingUsers: 'Überspringt alle aktuell bestehenden User, sodass die Willkommensnachricht nur noch an ab jetzt neu erstellte User geht. Kann jederzeit, auch mehrmals, gefahrlos geklickt werden – bereits markierte User werden dabei einfach übersprungen.',
+            btnUnmarkExistingUsers: 'Begrüsste User zurücksetzen',
+            noteUnmarkExistingUsers: 'Leert die Liste der bereits begrüssten User und schaltet "Willkommensnachricht aktivieren" aus, damit nicht sofort etwas versendet wird. Jeder aktuelle User erhält die Willkommensnachricht dann erneut, sobald ihr sie wieder aktiviert - beim jeweils nächsten Login.',
 
             placeholderMessage: 'Nachricht hier eingeben...',
 
@@ -304,7 +331,10 @@ define(['baseView'], function (BaseView) {
 
             btnSendNow: 'Sofort senden',
             btnSchedule: 'Nachricht terminieren',
+            btnSaveScheduleChanges: 'Änderungen speichern',
+            btnEditScheduled: 'Bearbeiten',
             btnStartTimer: 'Timer starten',
+            btnScheduleTimer: 'Timer terminieren',
             btnCancelTimer: 'Timer abbrechen',
             btnPreviewMediaNews: 'Vorschau anzeigen',
             btnHidePreview: 'Vorschau ausblenden',
@@ -318,6 +348,7 @@ define(['baseView'], function (BaseView) {
             manageGroupsLink: '✎ Gruppen verwalten',
             refreshHistory: '↻ Aktualisieren',
             clearAllHistory: '✕ Alles verwerfen',
+            linkCancelEdit: '✕ Bearbeitung abbrechen',
             presetUnit: 'Min.',
 
             defaultInstantHeader: 'Ankündigung',
@@ -355,12 +386,19 @@ define(['baseView'], function (BaseView) {
             msgPleaseSetDateTime: 'Bitte ein Datum und eine Uhrzeit in der Zukunft wählen.',
             msgSent: 'Gesendet - {0} zugestellt, {1} ausstehend, {2} fehlgeschlagen.',
             msgScheduleCreated: 'Nachricht terminiert.',
+            msgScheduleUpdated: 'Nachricht aktualisiert.',
+            msgScheduleNotFound: 'Diese Nachricht existiert nicht mehr (wurde evtl. bereits versendet oder in einem anderen Tab storniert).',
             msgScheduleCancelled: 'Terminierte Nachricht abgebrochen.',
             msgConfirmCancelSchedule: 'Diese terminierte Nachricht abbrechen?',
             msgTimerStarted: 'Timer gestartet.',
+            msgTimerScheduled: 'Timer terminiert.',
             msgTimerCancelled: 'Timer abgebrochen.',
             msgTimerNoneActive: 'Kein aktiver Timer.',
             msgTimerInvalidTotal: 'Der Gesamt-Countdown muss größer als 0 Minuten sein.',
+            msgTimerAlreadyExists: 'Es läuft oder ist bereits ein Timer geplant - zuerst abbrechen.',
+            timerUpcomingTitle: 'Anstehender Timer & Server-Countdown',
+            timerStartsAt: 'Startet um {0}',
+            openOrderTimerScheduled: 'Countdown geplant',
             msgMediaNewsSending: 'Neuheiten werden zusammengestellt und gesendet…',
             msgMediaNewsPreviewing: 'Vorschau wird erstellt…',
             msgMediaNewsPreviewEmpty: 'Keine neuen Medien im gewählten Zeitraum - es würde nichts gesendet.',
@@ -473,7 +511,17 @@ define(['baseView'], function (BaseView) {
             groupFormEditTitle: 'Gruppe bearbeiten: {0}',
             recipientUnknownGroup: 'Unbekannte Gruppe',
             msgExistingUsersMarked: '{0} bestehende(r) User markiert - die Willkommensnachricht geht künftig nur noch an ab jetzt neu erstellte User.',
-            noteMarkExistingUsersLastRun: 'Wurde am {0} durchgeführt - {1} bestehende(r) User markiert.'
+            noteMarkExistingUsersLastRun: 'Wurde am {0} durchgeführt - {1} bestehende(r) User markiert.',
+            msgConfirmUnmarkExisting: 'Liste der begrüssten User zurücksetzen und "Willkommensnachricht aktivieren" ausschalten? Jeder aktuelle User erhält die Willkommensnachricht erneut, sobald ihr sie wieder aktiviert - nicht sofort, sondern beim jeweils nächsten Login.',
+            msgExistingUsersUnmarked: '{0} User zurückgesetzt - sie erhalten die Willkommensnachricht erneut, sobald ihr "Willkommensnachricht aktivieren" wieder einschaltet.',
+            noteUnmarkExistingUsersLastRun: 'Wurde am {0} durchgeführt - {1} User zurückgesetzt.',
+
+            mediaNewsStructureMovies: 'Neue Filme:',
+            mediaNewsStructureSeries: 'Neue Serien:',
+            mediaNewsStructureEpisodes: 'Neue Episoden:',
+            mediaNewsStructureMoviesLine: '- zeigt Filme, die in den letzten {0} Tagen hinzugefügt wurden',
+            mediaNewsStructureSeriesLine: '- zeigt Serien, die in den letzten {0} Tagen hinzugefügt wurden',
+            mediaNewsStructureEpisodesLine: '- zeigt neue Episoden, die in den letzten {0} Tagen hinzugefügt wurden'
         }
     };
 
@@ -590,7 +638,17 @@ define(['baseView'], function (BaseView) {
             try {
                 var probe = view;
                 var bg = null;
-                while (probe && probe !== document.documentElement) {
+                // Walk every ancestor all the way up to and including <html> - previously stopped
+                // one level short of <html> and only separately fell back to <body> (itself
+                // already covered by this same walk, since body is always view's ancestor), which
+                // meant a theme painting its background on <html> itself was never seen and this
+                // silently kept whatever bcm-light-bg state happened to already be set (normally
+                // "not light", i.e. the dark-theme-tuned defaults). Confirmed 2026-08-24: Emby has
+                // a SEPARATE theme setting just for the Dashboard (independent of the main
+                // library-view theme), and its Light Dashboard theme apparently does exactly
+                // that - <html>.parentElement is naturally null, so the loop still terminates on
+                // its own without a separate stop condition.
+                while (probe) {
                     var color = window.getComputedStyle(probe).backgroundColor;
                     if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') {
                         bg = color;
@@ -598,7 +656,6 @@ define(['baseView'], function (BaseView) {
                     }
                     probe = probe.parentElement;
                 }
-                if (!bg) bg = window.getComputedStyle(document.body).backgroundColor;
                 var match = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(bg || '');
                 if (!match) return;
                 var r = parseInt(match[1], 10), g = parseInt(match[2], 10), b = parseInt(match[3], 10);
@@ -748,6 +805,12 @@ define(['baseView'], function (BaseView) {
             renderRecipientLists();
             loadScheduled();
             loadHistory();
+            // Neither of these two button labels are plain data-i18n text - both encode extra
+            // state (Timer's "Start later" checkbox, Scheduled Message's edit-vs-create mode) that
+            // applyStaticTranslations() just reset back to its default a few lines up, so they need
+            // an explicit re-derive here. See each function's own doc comment for why.
+            updateTimerStartButtonLabel();
+            setScheduledFormEditMode(!!editingScheduledId);
             updateTimerPreview();
             refreshMediaNewsAutoStatus();
             renderTileGrid();
@@ -1213,6 +1276,87 @@ define(['baseView'], function (BaseView) {
 
         // ---------------- scheduled message ----------------
 
+        // Non-null while the top form is editing an existing scheduled message rather than
+        // composing a new one (see startEditingScheduled()/cancelEditingScheduled() below) - the
+        // form fields are shared between "create" and "edit" (same pattern as the User Groups
+        // form), only this flag and the Save button's label distinguish which mode is active.
+        var editingScheduledId = null;
+
+        function resetScheduledForm() {
+            view.querySelector('.scheduled-header').value = t('defaultScheduledHeader');
+            view.querySelector('.scheduled-text').value = '';
+            view.querySelector('.scheduled-timeout').value = 0;
+            view.querySelector('.scheduled-datetime').value = '';
+            resetRecipientGroup('scheduled', 'All');
+        }
+
+        // Swaps the Save button's label between "Schedule Message"/"Save Changes" and shows/hides
+        // the "Cancel edit" link - called both when entering/leaving edit mode and again from
+        // setLanguage() (see updateTimerStartButtonLabel()'s doc comment for why a plain one-time
+        // textContent assignment isn't enough: applyStaticTranslations() would reset the button
+        // back to its data-i18n default on every language switch otherwise).
+        function setScheduledFormEditMode(editing) {
+            view.querySelector('.scheduled-create').textContent = t(editing ? 'btnSaveScheduleChanges' : 'btnSchedule');
+            view.querySelector('.scheduled-cancel-edit').style.display = editing ? '' : 'none';
+        }
+
+        function cancelEditingScheduled() {
+            editingScheduledId = null;
+            resetScheduledForm();
+            setScheduledFormEditMode(false);
+        }
+
+        // Converts a Date to the local "YYYY-MM-DDTHH:mm" string a <input type="datetime-local">
+        // expects as its value - used to prefill the date/time field below. Built from the Date
+        // object's local getters (not toISOString(), which is UTC) so the picker shows the same
+        // wall-clock time the admin originally chose, in the browser's own local time zone.
+        function toDatetimeLocalValue(date) {
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+                'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+        }
+
+        // Loads an existing scheduled message's values into the (shared) form above and switches
+        // it into edit mode - clicking "Save Changes" afterwards updates this same message in
+        // place instead of creating a new one (see the .scheduled-create handler below). Clicking
+        // Edit on a different message while one is already being edited simply switches to the new
+        // one, discarding any unsaved changes to the first - no confirmation, by design (kept
+        // deliberately simple; "Cancel edit" is the only way out that was asked for).
+        function startEditingScheduled(item) {
+            editingScheduledId = item.Id;
+            view.querySelector('.scheduled-header').value = item.Header || '';
+            view.querySelector('.scheduled-text').value = item.Text || '';
+            view.querySelector('.scheduled-timeout').value = Math.round((item.TimeoutMs || 0) / 1000);
+            view.querySelector('.scheduled-datetime').value = toDatetimeLocalValue(new Date(item.SendAtUtc));
+
+            var mode = item.RecipientMode || 'All';
+            var radio = view.querySelector('.scheduled-recipient-group input[type=radio][value="' + mode + '"]');
+            if (radio) {
+                radio.checked = true;
+                // Dispatched (not just .checked = true) so the existing wireRecipientGroup()
+                // listener actually runs - it shows/hides the user list for this mode and clears
+                // any previously-checked users, exactly as a real click would. The correct users/
+                // groups for THIS item are then checked explicitly right after.
+                radio.dispatchEvent(new Event('change'));
+            }
+            if (mode === 'Specific') {
+                var list = view.querySelector('.scheduled-userlist');
+                (item.SpecificUserIds || []).forEach(function (uid) {
+                    var cb = list.querySelector('input[type=checkbox]:not(.group-checkbox)[value="' + uid + '"]');
+                    if (cb) cb.checked = true;
+                });
+                (item.SpecificGroupIds || []).forEach(function (gid) {
+                    var cb = list.querySelector('input.group-checkbox[value="' + gid + '"]');
+                    if (cb) cb.checked = true;
+                });
+            }
+
+            setScheduledFormEditMode(true);
+            view.querySelector('.scheduled-header').scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+
+        view.querySelector('.scheduled-cancel-edit').addEventListener('click', cancelEditingScheduled);
+
         view.querySelector('.scheduled-create').addEventListener('click', function () {
             var header = view.querySelector('.scheduled-header').value.trim() || t('defaultScheduledHeader');
             var text = view.querySelector('.scheduled-text').value.trim();
@@ -1231,16 +1375,33 @@ define(['baseView'], function (BaseView) {
             var groupIds = mode === 'Specific' ? getSelectedGroupIds('scheduled') : [];
             if (mode === 'Specific' && userIds.length === 0 && groupIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
 
-            ajax('POST', 'EmbyCast/Schedule', {
+            var payload = {
                 Header: header, Text: text, TimeoutMs: timeoutSec * 1000,
                 SendAtUtc: sendAt.toISOString(), RecipientMode: mode, UserIds: userIds, GroupIds: groupIds
-            }).then(function () {
-                showStatus(statusEl, t('msgScheduleCreated'), 'ok');
-                view.querySelector('.scheduled-header').value = t('defaultScheduledHeader');
-                view.querySelector('.scheduled-text').value = '';
-                view.querySelector('.scheduled-timeout').value = 0;
-                view.querySelector('.scheduled-datetime').value = '';
-                resetRecipientGroup('scheduled', 'All');
+            };
+
+            var editingId = editingScheduledId;
+            var request = editingId
+                ? ajax('POST', 'EmbyCast/Schedule/' + editingId, payload)
+                : ajax('POST', 'EmbyCast/Schedule', payload);
+
+            request.then(function (result) {
+                // The server returns null (200 OK, empty body) if the message being edited no
+                // longer exists - e.g. it already fired or was cancelled from another tab in the
+                // meantime. Same handling as the Groups form: treat that as an error rather than
+                // showing a false "Message updated.", then fall back to the create-a-new-one state.
+                if (editingId && !result) {
+                    showStatus(statusEl, t('msgScheduleNotFound'), 'err');
+                    cancelEditingScheduled();
+                    loadScheduled();
+                    return;
+                }
+                showStatus(statusEl, t(editingId ? 'msgScheduleUpdated' : 'msgScheduleCreated'), 'ok');
+                if (editingId) {
+                    cancelEditingScheduled();
+                } else {
+                    resetScheduledForm();
+                }
                 loadScheduled();
             }, function (err) {
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
@@ -1260,6 +1421,15 @@ define(['baseView'], function (BaseView) {
 
         function renderScheduled(items) {
             lastScheduledItems = items || [];
+            // The message currently loaded into the form for editing may have been cancelled or
+            // may have fired from another tab/session since the last refresh - loadScheduled() gets
+            // called from several places besides this feature's own success paths (onResume,
+            // setLanguage(), tile navigation), none of which know about editingScheduledId. Catch
+            // that here too, not just in the two spots that trigger a save/cancel directly, so the
+            // form never keeps silently showing stale data for a message that's already gone.
+            if (editingScheduledId && !lastScheduledItems.some(function (s) { return s.Id === editingScheduledId; })) {
+                cancelEditingScheduled();
+            }
             var el = view.querySelector('.scheduled-list');
             if (!items || items.length === 0) {
                 el.innerHTML = '<p style="opacity:.35;font-size:.85em;margin:0;">' + esc(t('msgNoScheduled')) + '</p>';
@@ -1274,16 +1444,35 @@ define(['baseView'], function (BaseView) {
                 row.innerHTML =
                     '<div class="bcm-history-head">' +
                     '<span><strong>' + esc(s.Header) + '</strong> &mdash; ' + esc(when) + '</span>' +
+                    '<span style="display:flex;gap:.4em;flex-shrink:0;">' +
+                    '<button class="bcm-dismiss edit-scheduled-btn" data-id="' + esc(s.Id) + '">' + esc(t('btnEditScheduled')) + '</button>' +
                     '<button class="bcm-dismiss cancel-scheduled-btn" data-id="' + esc(s.Id) + '">' + esc(t('msgCancel')) + '</button>' +
+                    '</span>' +
                     '</div>' +
                     buildRecipientLineHtml(s) +
                     '<div style="font-size:.88em;opacity:.75;">' + esc(s.Text) + '</div>';
                 el.appendChild(row);
             });
+            el.querySelectorAll('.edit-scheduled-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var id = btn.getAttribute('data-id');
+                    var item = lastScheduledItems.filter(function (s) { return s.Id === id; })[0];
+                    if (item) startEditingScheduled(item);
+                });
+            });
             el.querySelectorAll('.cancel-scheduled-btn').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     if (!window.confirm(t('msgConfirmCancelSchedule'))) return;
-                    ajax('DELETE', 'EmbyCast/Schedule/' + btn.getAttribute('data-id')).then(loadScheduled);
+                    var id = btn.getAttribute('data-id');
+                    ajax('DELETE', 'EmbyCast/Schedule/' + id).then(function () {
+                        // The message just cancelled from the list might be the one currently
+                        // loaded into the form above for editing - leaving edit mode on in that
+                        // case would let "Save Changes" try to update a message that no longer
+                        // exists (harmless - it just falls into the msgScheduleNotFound branch -
+                        // but resetting here avoids the confusing intermediate state entirely).
+                        if (id === editingScheduledId) cancelEditingScheduled();
+                        loadScheduled();
+                    });
                 });
             });
             wireRecipientMoreLinks(el);
@@ -1455,6 +1644,26 @@ define(['baseView'], function (BaseView) {
             updateTimerTextForAction(this.value);
         });
 
+        // Swaps the main button's label between "Start Timer"/"Schedule Timer" based on the
+        // "Start later" checkbox - reads the checkbox itself rather than taking a parameter, and
+        // is called both from the checkbox's own change handler below AND from setLanguage() (see
+        // that function), since applyStaticTranslations() would otherwise reset the button back to
+        // its data-i18n default ("Start Timer") on every language switch regardless of which mode
+        // is actually active - a plain one-time textContent assignment isn't enough to survive that.
+        function updateTimerStartButtonLabel() {
+            var scheduleEnabled = view.querySelector('.timer-schedule-enabled').checked;
+            view.querySelector('.timer-start').textContent = t(scheduleEnabled ? 'btnScheduleTimer' : 'btnStartTimer');
+        }
+
+        // Toggling "Start later" shows/hides the date & time picker and swaps the main button's
+        // label (Start Timer / Schedule Timer) so it's always obvious which action a click will
+        // actually perform - purely cosmetic, the real branching happens server-side based on
+        // whether ScheduledStartUtc is sent at all (see EmbyCastApi.Post(StartTimer)).
+        view.querySelector('.timer-schedule-enabled').addEventListener('change', function () {
+            view.querySelector('.timer-schedule-datetime-wrap').style.display = this.checked ? '' : 'none';
+            updateTimerStartButtonLabel();
+        });
+
         view.querySelector('.timer-start').addEventListener('click', function () {
             var header = view.querySelector('.timer-header').value.trim() || t('defaultTimerHeader');
             var template = view.querySelector('.timer-text').value.trim();
@@ -1465,17 +1674,40 @@ define(['baseView'], function (BaseView) {
 
             if (total <= 0) { showStatus(statusEl, t('msgTimerInvalidTotal'), 'err'); return; }
 
+            var scheduleEnabled = view.querySelector('.timer-schedule-enabled').checked;
+            var scheduledStartUtc = null;
+            if (scheduleEnabled) {
+                var dtVal = view.querySelector('.timer-schedule-datetime').value;
+                var picked = dtVal ? new Date(dtVal) : null;
+                if (!picked || isNaN(picked.getTime()) || picked <= new Date()) {
+                    showStatus(statusEl, t('msgPleaseSetDateTime'), 'err');
+                    return;
+                }
+                scheduledStartUtc = picked.toISOString();
+            }
+
             var mode = getRecipientMode('timer');
             var userIds = mode === 'Specific' ? getSelectedUserIds('timer') : [];
             var groupIds = mode === 'Specific' ? getSelectedGroupIds('timer') : [];
             if (mode === 'Specific' && userIds.length === 0 && groupIds.length === 0) { showStatus(statusEl, t('msgPleaseSelectUsers'), 'err'); return; }
 
-            ajax('POST', 'EmbyCast/Timer/Start', {
+            var payload = {
                 Header: header, TextTemplate: template, TotalMinutes: total,
                 PresetMinutes: enabledPresets, PostAction: postAction,
                 RecipientMode: mode, UserIds: userIds, GroupIds: groupIds, TimeoutMs: timeoutSec * 1000
-            }).then(function () {
-                showStatus(statusEl, t('msgTimerStarted'), 'ok');
+            };
+            if (scheduledStartUtc) payload.ScheduledStartUtc = scheduledStartUtc;
+
+            ajax('POST', 'EmbyCast/Timer/Start', payload).then(function (result) {
+                // The single-timer slot may already be occupied - see EmbyCastApi.
+                // Post(StartTimer)'s guard, which returns {Success:false, AlreadyExists:true}
+                // (a normal 200 response, not a thrown error) precisely so this can show a clear,
+                // specific status message instead of a generic "Error: ...".
+                if (result && result.Success === false) {
+                    showStatus(statusEl, t('msgTimerAlreadyExists'), 'err');
+                    return;
+                }
+                showStatus(statusEl, t(scheduledStartUtc ? 'msgTimerScheduled' : 'msgTimerStarted'), 'ok');
                 view.querySelector('.timer-header').value = t('defaultTimerHeader');
                 resetTimerTextToDefault(postAction);
                 view.querySelector('.timer-total').value = 60;
@@ -1485,6 +1717,10 @@ define(['baseView'], function (BaseView) {
                 renderPresetChips();
                 resetRecipientGroup('timer', 'Active');
                 updateTimerPreview();
+                view.querySelector('.timer-schedule-enabled').checked = false;
+                view.querySelector('.timer-schedule-datetime-wrap').style.display = 'none';
+                view.querySelector('.timer-schedule-datetime').value = '';
+                updateTimerStartButtonLabel();
                 startTimerPolling();
             }, function (err) {
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
@@ -1493,13 +1729,25 @@ define(['baseView'], function (BaseView) {
 
         view.querySelector('.timer-cancel').addEventListener('click', function () {
             var statusEl = view.querySelector('.timer-status');
-            ajax('POST', 'EmbyCast/Timer/Cancel').then(function () {
-                showStatus(statusEl, t('msgTimerCancelled'), 'ok');
+            ajax('POST', 'EmbyCast/Timer/Cancel').then(function (result) {
+                // CancelTimer returns {Success:false} when there was nothing active or pending to
+                // cancel (see TimerService.CancelTimer) - only show the "cancelled" confirmation
+                // when something was actually cancelled, rather than unconditionally.
+                if (result && result.Success === false) {
+                    showStatus(statusEl, t('msgTimerNoneActive'), 'ok');
+                } else {
+                    showStatus(statusEl, t('msgTimerCancelled'), 'ok');
+                }
                 refreshTimerStatus();
             });
         });
 
         var lastTimerStatus = null;
+        // Separate from lastTimerStatus above (which is Active-only, driving the live countdown
+        // chip/bar): tracks a scheduled-but-not-yet-started timer, for the tile dot badge and the
+        // "Offene Aufträge" list. Never both non-null at once (Active and Pending are mutually
+        // exclusive - see TimerStatusDto).
+        var lastTimerPending = null;
 
         // Shared by the Timer card's own countdown text and the tile grid's countdown badge (see
         // renderTileBadges()), so both always agree and a tile reorder (which recreates the tile
@@ -1514,17 +1762,66 @@ define(['baseView'], function (BaseView) {
             return pad(h) + ':' + pad(m) + ':' + pad(s);
         }
 
+        // Builds the "Upcoming Timer & Server Countdown" card for a Pending (scheduled but not
+        // yet started) timer - same visual treatment as the "Upcoming scheduled messages" list
+        // (reuses .bcm-history-item/.bcm-history-head and buildRecipientLineHtml, which already
+        // works off any object exposing RecipientMode/SpecificUserIds/SpecificGroupIds, see
+        // TimerStatusDto). Unlike that list there's ever only one entry, since only one timer job
+        // can exist at a time (see TimerService.HasActiveOrPendingTimer).
+        function renderTimerUpcoming(status) {
+            var wrap = view.querySelector('.timer-upcoming-wrap');
+            var el = view.querySelector('.timer-upcoming-list');
+            if (!status || !status.Pending) {
+                wrap.style.display = 'none';
+                el.innerHTML = '';
+                return;
+            }
+            var when = fmt('timerStartsAt', new Date(status.ScheduledStartUtc).toLocaleString());
+            el.innerHTML =
+                '<div class="bcm-history-item">' +
+                '<div class="bcm-history-head">' +
+                '<span><strong>' + esc(status.Header) + '</strong> &mdash; ' + esc(when) + '</span>' +
+                '<button class="bcm-dismiss timer-upcoming-cancel-btn">' + esc(t('msgCancel')) + '</button>' +
+                '</div>' +
+                buildRecipientLineHtml(status) +
+                '<div style="font-size:.88em;opacity:.75;">' + esc(status.TextTemplate || '') + '</div>' +
+                '</div>';
+            el.querySelector('.timer-upcoming-cancel-btn').addEventListener('click', function () {
+                var statusEl = view.querySelector('.timer-status');
+                ajax('POST', 'EmbyCast/Timer/Cancel').then(function () {
+                    showStatus(statusEl, t('msgTimerCancelled'), 'ok');
+                    refreshTimerStatus();
+                });
+            });
+            wireRecipientMoreLinks(el);
+            wrap.style.display = '';
+        }
+
         function refreshTimerStatus() {
             ajax('GET', 'EmbyCast/Timer/Status').then(function (status) {
                 lastTimerStatus = (status && status.Active) ? status : null;
+                lastTimerPending = (status && status.Pending) ? status : null;
                 var visual = view.querySelector('.timer-visual');
-                if (!status || !status.Active) {
+                renderTimerUpcoming(status);
+
+                if (!status || (!status.Active && !status.Pending)) {
                     visual.style.display = 'none';
                     stopTimerPolling();
                     renderTileBadges();
                     renderOpenOrders();
                     return;
                 }
+
+                if (!status.Active) {
+                    // Pending: nothing to tick down yet - still poll (see below) so this flips
+                    // over to the live countdown automatically once the server actually starts it.
+                    visual.style.display = 'none';
+                    if (!timerPollHandle) { timerPollHandle = window.setInterval(refreshTimerStatus, 1000); }
+                    renderTileBadges();
+                    renderOpenOrders();
+                    return;
+                }
+
                 visual.style.display = 'block';
                 var remaining = Math.max(0, status.SecondsRemaining || 0);
                 var text = formatHms(remaining);
@@ -1648,6 +1945,45 @@ define(['baseView'], function (BaseView) {
             };
         }
 
+        // Builds a purely structural preview of the message - the section labels and a
+        // placeholder-style description line for each (using the currently configured Header and
+        // lookback-days), rather than the actual movie/show titles that would be found. Replaced
+        // the old "real content" preview (which hit EmbyCast/MediaNews/Preview or PreviewSaved)
+        // 2026-08-24 per user feedback: admins just want to check the message's shape/wording,
+        // not preview real library content here. "New Movies" has no matching checkbox (Movies
+        // are queried unconditionally, same as the real digest - see MediaNewsService.
+        // ToMessageText, though there that section only actually prints once at least one movie
+        // was found; here it's always shown, since this is a preview of the possible structure,
+        // not of an actual result), so it's shown unconditionally; "New TV Shows"/"New Episodes"
+        // mirror their own checkboxes.
+        // Deliberately built client-side with no network call - it no longer depends on which (if
+        // any) libraries are selected.
+        function buildMediaNewsStructureLines(header, days, includeSeries, includeEpisodes) {
+            var lines = ['[' + header + ']', t('mediaNewsStructureMovies'), fmt('mediaNewsStructureMoviesLine', days)];
+            if (includeSeries) lines.push('', t('mediaNewsStructureSeries'), fmt('mediaNewsStructureSeriesLine', days));
+            if (includeEpisodes) lines.push('', t('mediaNewsStructureEpisodes'), fmt('mediaNewsStructureEpisodesLine', days));
+            return lines.join('\n');
+        }
+
+        // For the two form-based preview buttons (main section + auto-send fields) - reads
+        // straight from whatever is currently in the form, matching what buildMediaNewsPayload()
+        // above would send.
+        function buildMediaNewsStructurePreviewText() {
+            var header = view.querySelector('.medianews-header').value.trim() || t('defaultMediaNewsHeader');
+            var days = parseInt(view.querySelector('.medianews-days').value, 10) || 7;
+            return buildMediaNewsStructureLines(header, days, getIncludeNewSeries(), getIncludeNewEpisodes());
+        }
+
+        // For the "upcoming auto-send" card's saved-config preview - reads from the SAVED
+        // MediaNewsAutoStatusDto (see renderMediaNewsAutoStatus below) rather than the form, same
+        // "saved, not whatever's unsaved in the form" distinction the old PreviewSaved endpoint
+        // existed for.
+        function buildMediaNewsStructurePreviewTextFromStatus(status) {
+            var header = (status && status.Header) || t('defaultMediaNewsHeader');
+            var days = (status && status.LookbackDays) || 7;
+            return buildMediaNewsStructureLines(header, days, !!(status && status.IncludeNewSeries), !!(status && status.IncludeNewEpisodes));
+        }
+
         // Sets a preview button/box pair to a definite shown/hidden state - tracked via a
         // data-shown attribute on the box itself (rather than inferring it from style.display)
         // so toggleMediaNewsPreview below has one unambiguous source of truth to read back.
@@ -1659,17 +1995,16 @@ define(['baseView'], function (BaseView) {
 
         // Shared by all three "Preview" buttons on this card (main section, auto-send section,
         // and the "upcoming auto-send" card's own button) - each passes its own preview/status
-        // elements and its own fetch function (they hit different endpoints/payloads: the first
-        // two build from the current, possibly-unsaved form fields via buildMediaNewsPayload(),
-        // the third from the actually-saved config via the PreviewSaved endpoint). Toggles: a
-        // second click while already shown just hides it again, with no new request - only a
-        // click while hidden fetches a fresh preview.
+        // elements and its own text-producing function. All three now build a purely structural
+        // preview client-side (see buildMediaNewsStructurePreviewText[FromStatus]) rather than
+        // hitting the server for real content - fetchPromiseFn is still a Promise-returning
+        // function (resolved immediately, via Promise.resolve) so this toggle/show/hide/close-
+        // button plumbing didn't need to change. Toggles: a second click while already shown just
+        // hides it again - only a click while hidden (re)builds the text.
         //
-        // validateFn (optional) runs only when about to SHOW a new preview (not when
-        // just hiding an already-shown one) - lets the two form-based preview buttons warn about
-        // "no library selected" the same way "Send Media News Now" already does, instead of
-        // making a request that always comes back empty and showing the misleading "no new media
-        // in the selected period" message for what's actually a missing-selection problem.
+        // validateFn (optional) runs only when about to SHOW a new preview (not when just hiding
+        // an already-shown one) - currently unused (the structural preview has nothing to
+        // validate), kept for any future preview kind that needs it.
         function toggleMediaNewsPreview(btn, previewEl, statusEl, fetchPromiseFn, validateFn) {
             if (previewEl.dataset.shown === '1') {
                 setPreviewShown(btn, previewEl, false);
@@ -1710,9 +2045,11 @@ define(['baseView'], function (BaseView) {
 
         view.querySelector('.medianews-preview-btn').addEventListener('click', function () {
             var btn = this;
+            // Purely structural preview, built client-side - no request, no library-selection
+            // guard (the structure doesn't depend on which libraries are picked). See
+            // buildMediaNewsStructurePreviewText().
             toggleMediaNewsPreview(btn, view.querySelector('.medianews-preview'), view.querySelector('.medianews-status'),
-                function () { return ajax('POST', 'EmbyCast/MediaNews/Preview', buildMediaNewsPayload()); },
-                function () { return getSelectedLibraryIds().length === 0 ? t('msgPleaseSelectLibrary') : null; });
+                function () { return Promise.resolve({ Text: buildMediaNewsStructurePreviewText() }); });
         });
 
         view.querySelector('.medianews-send').addEventListener('click', function () {
@@ -1847,8 +2184,7 @@ define(['baseView'], function (BaseView) {
         view.querySelector('.medianews-auto-preview-btn').addEventListener('click', function () {
             var btn = this;
             toggleMediaNewsPreview(btn, view.querySelector('.medianews-auto-preview'), view.querySelector('.medianews-auto-status'),
-                function () { return ajax('POST', 'EmbyCast/MediaNews/Preview', buildMediaNewsPayload()); },
-                function () { return getSelectedLibraryIds().length === 0 ? t('msgPleaseSelectLibrary') : null; });
+                function () { return Promise.resolve({ Text: buildMediaNewsStructurePreviewText() }); });
         });
 
         view.querySelector('.medianews-auto-save').addEventListener('click', function () {
@@ -1913,10 +2249,20 @@ define(['baseView'], function (BaseView) {
         // messages" list under Scheduled Message, but showing only the Header (never a message
         // body, since Media News' actual content can't be known until it's actually built at
         // send time) - except for the dedicated saved-config Preview button below, which DOES
-        // build and show the actual text on demand, from the saved config specifically (via the
-        // PreviewSaved endpoint), never from whatever is currently unsaved in the form above.
+        // build and show a structural preview on demand, from the saved config specifically (see
+        // buildMediaNewsStructurePreviewTextFromStatus), never from whatever is currently unsaved
+        // in the form above.
+        // Tracks the weekly auto-send's on/off state for the Media News tile's dot badge (see
+        // renderTileBadges()) - kept as its own variable rather than read from pluginConfig,
+        // since auto-send is saved through its own dedicated endpoint (EmbyCast/MediaNews/
+        // AutoConfig) rather than ApiClient.updatePluginConfiguration, so pluginConfig's copy of
+        // MediaNewsAutoSendEnabled would otherwise go stale after a save here.
+        var lastMediaNewsAutoEnabled = false;
+
         function renderMediaNewsAutoStatus(status) {
             if (!status) return;
+            lastMediaNewsAutoEnabled = !!status.Enabled;
+            renderTileBadges();
             var nextRunEl = view.querySelector('.medianews-next-run');
             var upcomingEl = view.querySelector('.medianews-auto-upcoming');
             if (status.Enabled) {
@@ -1949,7 +2295,7 @@ define(['baseView'], function (BaseView) {
                 setPreviewShown(savedPreviewBtn, savedPreviewEl, false);
                 savedPreviewBtn.addEventListener('click', function () {
                     toggleMediaNewsPreview(savedPreviewBtn, savedPreviewEl, view.querySelector('.medianews-auto-status'),
-                        function () { return ajax('POST', 'EmbyCast/MediaNews/PreviewSaved', { Language: currentLang }); });
+                        function () { return Promise.resolve({ Text: buildMediaNewsStructurePreviewTextFromStatus(status) }); });
                 });
 
                 upcomingEl.style.display = '';
@@ -1990,6 +2336,7 @@ define(['baseView'], function (BaseView) {
                 if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
                     try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
                 }
+                renderTileBadges();
             }, function (err) {
                 // Roll the switch (and pluginConfig's in-memory copy) back to whatever was
                 // actually last saved - otherwise a failed request would leave the switch showing
@@ -2023,10 +2370,24 @@ define(['baseView'], function (BaseView) {
             el.style.display = '';
         }
 
-        // Populate the hint from whatever was already persisted, on page load - the button
-        // itself may not have been clicked at all in this session, or ever.
+        // Same idea as renderMarkExistingLastRun above, but for the opposite "Reset welcomed
+        // users" button (its own persistent hint element, .welcome-unmark-lastrun).
+        function renderUnmarkExistingLastRun(lastRunUtc, count) {
+            var el = view.querySelector('.welcome-unmark-lastrun');
+            if (!el) return;
+            if (!lastRunUtc) { el.style.display = 'none'; return; }
+            var dateText = new Date(lastRunUtc).toLocaleDateString();
+            el.textContent = fmt('noteUnmarkExistingUsersLastRun', dateText, count || 0);
+            el.style.display = '';
+        }
+
+        // Populate both hints from whatever was already persisted, on page load - the buttons
+        // themselves may not have been clicked at all in this session, or ever.
         ajax('GET', 'EmbyCast/Welcome/MarkExistingStatus').then(function (result) {
             renderMarkExistingLastRun(result && result.LastRunUtc, result && result.Count);
+        }, function () { /* ignore - hint just stays hidden */ });
+        ajax('GET', 'EmbyCast/Welcome/UnmarkExistingStatus').then(function (result) {
+            renderUnmarkExistingLastRun(result && result.LastRunUtc, result && result.Count);
         }, function () { /* ignore - hint just stays hidden */ });
 
         view.querySelector('.welcome-mark-existing').addEventListener('click', function () {
@@ -2037,6 +2398,32 @@ define(['baseView'], function (BaseView) {
                 btn.disabled = false;
                 showStatus(statusEl, fmt('msgExistingUsersMarked', (result && result.Count) || 0), 'ok');
                 renderMarkExistingLastRun(result && result.LastRunUtc, result && result.Count);
+            }, function (err) {
+                btn.disabled = false;
+                showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
+            });
+        });
+
+        // Opposite of "Mark existing users" above: clears the welcomed-users list entirely, so
+        // every current user is treated as never-welcomed again. Confirmed first since it's a
+        // bulk action with a real, delayed consequence (each affected user gets the welcome
+        // message again at their NEXT login, not immediately - see MessageStore.
+        // UnmarkAllWelcomed's doc comment) rather than an instant mass-send.
+        // Also turns "Enable welcome message" off server-side (see Post(UnmarkAllWelcomed) in
+        // EmbyCastApi.cs) - reflected here in both pluginConfig's in-memory copy and the switch
+        // itself, so the dashboard doesn't keep showing it as enabled until the next reload.
+        view.querySelector('.welcome-unmark-existing').addEventListener('click', function () {
+            if (!window.confirm(t('msgConfirmUnmarkExisting'))) return;
+            var statusEl = view.querySelector('.welcome-mark-status');
+            var btn = this;
+            btn.disabled = true;
+            ajax('POST', 'EmbyCast/Welcome/UnmarkAll').then(function (result) {
+                btn.disabled = false;
+                showStatus(statusEl, fmt('msgExistingUsersUnmarked', (result && result.Count) || 0), 'ok');
+                renderUnmarkExistingLastRun(result && result.LastRunUtc, result && result.Count);
+                if (pluginConfig) pluginConfig.WelcomeMessageEnabled = false;
+                view.querySelector('.welcome-enabled').checked = false;
+                renderTileBadges();
             }, function (err) {
                 btn.disabled = false;
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
@@ -2260,6 +2647,7 @@ define(['baseView'], function (BaseView) {
                 if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
                     try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
                 }
+                renderTileBadges();
             }, function (err) {
                 // Revert both the visible switch AND the shared pluginConfig object on failure -
                 // reverting only the checkbox would leave pluginConfig.CleanupEnabled holding the
@@ -2461,15 +2849,19 @@ define(['baseView'], function (BaseView) {
             if (existing) existing.parentNode.removeChild(existing);
             if (!opts) return;
             var badge = document.createElement('span');
-            badge.className = 'tile-badge' + (opts.dot ? ' dot' : '');
+            // opts.cls ('green'/'muted') selects the dot's color - see the .tile-badge.dot.green/
+            // .tile-badge.dot.muted rules in config.html. Only meaningful together with opts.dot;
+            // ignored for the plain numeric badges (Scheduled/Groups), which stay the original red.
+            badge.className = 'tile-badge' + (opts.dot ? ' dot' : '') + (opts.cls ? ' ' + opts.cls : '');
             if (!opts.dot) badge.textContent = opts.text;
             tile.insertBefore(badge, tile.firstChild);
         }
 
         // Badge data all comes from state already loaded for other purposes (updateAvailableFlag
         // from the silent update check, lastScheduledItems from the Scheduled Message list,
-        // lastTimerStatus from the timer poll) - no dedicated endpoint/request needed just for
-        // the tile grid.
+        // lastTimerStatus/lastTimerPending from the timer poll, lastMediaNewsAutoEnabled from the
+        // auto-send status, pluginConfig.WelcomeMessageEnabled/CleanupEnabled from the shared
+        // config object) - no dedicated endpoint/request needed just for the tile grid.
         function renderTileBadges() {
             var grid = view.querySelector('#tileGrid');
             if (!grid) return;
@@ -2477,6 +2869,20 @@ define(['baseView'], function (BaseView) {
             var count = (lastScheduledItems || []).length;
             setTileBadge('scheduled', count > 0 ? { text: String(count) } : null);
             setTileBadge('groups', allGroupsCache.length > 0 ? { text: String(allGroupsCache.length) } : null);
+
+            // Media News / Welcome Message / Scheduled Cleanup: always show a dot reflecting
+            // their persistent on/off state (green = on, grey = off) rather than hiding it when
+            // off - unlike Timer below, "off" here is an admin-configured setting worth a
+            // deliberate reminder, not just a normal resting state.
+            setTileBadge('medianews', { dot: true, cls: lastMediaNewsAutoEnabled ? 'green' : 'muted' });
+            setTileBadge('welcome', { dot: true, cls: (pluginConfig && pluginConfig.WelcomeMessageEnabled) ? 'green' : 'muted' });
+            setTileBadge('cleanup', { dot: true, cls: (pluginConfig && pluginConfig.CleanupEnabled !== false) ? 'green' : 'muted' });
+
+            // Timer: only ever shows the green dot (active countdown running, or one scheduled
+            // for later) - "nothing scheduled" is its normal resting state, not a toggle to
+            // remind the admin about, so no grey/muted variant here.
+            setTileBadge('timer', (lastTimerStatus || lastTimerPending) ? { dot: true, cls: 'green' } : null);
+
             var countdownEl = grid.querySelector('.tile[data-key="timer"] .tile-countdown');
             if (countdownEl) {
                 countdownEl.style.display = lastTimerStatus ? 'flex' : 'none';
@@ -2539,6 +2945,12 @@ define(['baseView'], function (BaseView) {
                 items.push({
                     title: t('openOrderTimerActive'),
                     sub: fmt('openOrderEndsIn', formatDurationShort(lastTimerStatus.SecondsRemaining)),
+                    targetKey: 'timer'
+                });
+            } else if (lastTimerPending) {
+                items.push({
+                    title: t('openOrderTimerScheduled'),
+                    sub: fmt('timerStartsAt', new Date(lastTimerPending.ScheduledStartUtc).toLocaleString()),
                     targetKey: 'timer'
                 });
             }
