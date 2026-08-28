@@ -204,12 +204,15 @@ define(['baseView'], function (BaseView) {
             cleanupOfflineSuffix: 'day(s).',
             cleanupHistoryPrefix: 'All selected history entries below are deleted after',
             cleanupHistorySuffix: 'day(s). Scheduled Messages and the Media News automation (weekly job) are not affected by this.',
+            cleanupMaxEntriesPrefix: 'The history list is additionally capped at',
+            cleanupMaxEntriesSuffix: 'entrie(s) - the oldest are removed automatically as soon as a new one is added, regardless of the schedule above.',
             cleanupTypesTitle: 'Affected message types:',
             btnPurgeOffline: 'Delete all undelivered messages',
             btnPurgeHistory: 'Delete history now',
             btnSaveCleanup: 'Save Settings',
             msgCleanupSaved: 'Cleanup settings saved.',
             msgHistoryDaysTooLow: 'The history retention period cannot be shorter than the offline retention period ({0} day(s)).',
+            msgMaxEntriesOutOfRange: 'The maximum number of history entries must be between {0} and {1}.',
             msgConfirmPurgeOffline: 'Delete all {0} currently undelivered message(s) right now? This cannot be undone.',
             msgConfirmPurgeHistory: 'Delete all history entries matching the checked message types right now? This cannot be undone.',
             msgPurgedOffline: '{0} undelivered message(s) deleted.',
@@ -268,7 +271,8 @@ define(['baseView'], function (BaseView) {
             mediaNewsStructureEpisodes: 'New Episodes:',
             mediaNewsStructureMoviesLine: '- shows Movies added in the last {0} days',
             mediaNewsStructureSeriesLine: '- shows TV Shows added in the last {0} days',
-            mediaNewsStructureEpisodesLine: '- shows new Episodes added in the last {0} days'
+            mediaNewsStructureEpisodesLine: '- shows new Episodes added in the last {0} days',
+            mediaNewsStructureNoLibrary: 'No library selected - nothing would be sent.'
         },
         de: {
             pageTitle: 'EmbyCast',
@@ -457,12 +461,15 @@ define(['baseView'], function (BaseView) {
             cleanupOfflineSuffix: 'Tag(en) als "Expired" markiert und aus der Warteschlange entfernt.',
             cleanupHistoryPrefix: 'Alle ausgewählten History-Einträge unten werden nach Ablauf von',
             cleanupHistorySuffix: 'Tag(en) gelöscht. Scheduled Messages und Media-News-Automatik (wöchentlicher Auftrag) sind davon nicht betroffen.',
+            cleanupMaxEntriesPrefix: 'Die History-Liste wird zusätzlich automatisch auf maximal',
+            cleanupMaxEntriesSuffix: 'Einträge begrenzt - die ältesten werden sofort beim Hinzufügen eines neuen Eintrags entfernt, unabhängig vom Zeitplan oben.',
             cleanupTypesTitle: 'Betroffene Nachrichtentypen:',
             btnPurgeOffline: 'Alle nicht zugestellten Nachrichten löschen',
             btnPurgeHistory: 'History sofort löschen',
             btnSaveCleanup: 'Einstellungen speichern',
             msgCleanupSaved: 'Einstellungen für die Reinigung gespeichert.',
             msgHistoryDaysTooLow: 'Die History-Aufbewahrungsdauer darf nicht kürzer sein als die Offline-Aufbewahrungsdauer ({0} Tag(e)).',
+            msgMaxEntriesOutOfRange: 'Die maximale Anzahl History-Einträge muss zwischen {0} und {1} liegen.',
             msgConfirmPurgeOffline: 'Alle {0} aktuell nicht zugestellten Nachricht(en) jetzt löschen? Dies kann nicht rückgängig gemacht werden.',
             msgConfirmPurgeHistory: 'Alle History-Einträge löschen, die auf die angehakten Nachrichtentypen zutreffen? Dies kann nicht rückgängig gemacht werden.',
             msgPurgedOffline: '{0} nicht zugestellte Nachricht(en) gelöscht.',
@@ -521,7 +528,8 @@ define(['baseView'], function (BaseView) {
             mediaNewsStructureEpisodes: 'Neue Episoden:',
             mediaNewsStructureMoviesLine: '- zeigt Filme, die in den letzten {0} Tagen hinzugefügt wurden',
             mediaNewsStructureSeriesLine: '- zeigt Serien, die in den letzten {0} Tagen hinzugefügt wurden',
-            mediaNewsStructureEpisodesLine: '- zeigt neue Episoden, die in den letzten {0} Tagen hinzugefügt wurden'
+            mediaNewsStructureEpisodesLine: '- zeigt neue Episoden, die in den letzten {0} Tagen hinzugefügt wurden',
+            mediaNewsStructureNoLibrary: 'Keine Bibliothek ausgewählt - es würde nichts gesendet.'
         }
     };
 
@@ -1945,43 +1953,83 @@ define(['baseView'], function (BaseView) {
             };
         }
 
+        // Given a set of selected library ids, resolves which content categories they could ever
+        // actually contribute, using each library's ContentType from librariesCache (populated by
+        // loadLibraries()). Mirrors the real backend (MediaNewsService.BuildSinceDays) closely
+        // enough for preview purposes: that method filters purely by folder PATH, not by a
+        // library's configured content type, so a library typed "movies" can never yield a
+        // Series/Episode item and vice versa - only a "mixed"/unset-type library (or blank/null,
+        // which the dashboard displays as "mixed") could contain either. Added 2026-08-28 per user
+        // report: the structural preview was showing "New TV Shows" whenever the "Series entries"
+        // checkboxes were on and ANY library was selected, even with only a movies-typed library
+        // checked (and, symmetrically, "New Movies" whenever any library was selected even with
+        // only a tvshows-typed library checked) - neither could ever actually appear in the real
+        // send given that library selection.
+        function getMediaNewsLibraryTypeFlags(selectedIds) {
+            var wanted = {};
+            (selectedIds || []).forEach(function (id) { wanted[id] = true; });
+            var hasMovie = false, hasSeries = false;
+            (librariesCache || []).forEach(function (lib) {
+                if (!wanted[lib.Id]) return;
+                var type = (lib.ContentType || '').toLowerCase();
+                if (type === 'movies' || type === 'mixed' || type === '') hasMovie = true;
+                if (type === 'tvshows' || type === 'mixed' || type === '') hasSeries = true;
+            });
+            return { hasMovie: hasMovie, hasSeries: hasSeries };
+        }
+
         // Builds a purely structural preview of the message - the section labels and a
         // placeholder-style description line for each (using the currently configured Header and
-        // lookback-days), rather than the actual movie/show titles that would be found. Replaced
-        // the old "real content" preview (which hit EmbyCast/MediaNews/Preview or PreviewSaved)
-        // 2026-08-24 per user feedback: admins just want to check the message's shape/wording,
-        // not preview real library content here. "New Movies" has no matching checkbox (Movies
-        // are queried unconditionally, same as the real digest - see MediaNewsService.
-        // ToMessageText, though there that section only actually prints once at least one movie
-        // was found; here it's always shown, since this is a preview of the possible structure,
-        // not of an actual result), so it's shown unconditionally; "New TV Shows"/"New Episodes"
-        // mirror their own checkboxes.
-        // Deliberately built client-side with no network call - it no longer depends on which (if
-        // any) libraries are selected.
-        function buildMediaNewsStructureLines(header, days, includeSeries, includeEpisodes) {
-            var lines = ['[' + header + ']', t('mediaNewsStructureMovies'), fmt('mediaNewsStructureMoviesLine', days)];
-            if (includeSeries) lines.push('', t('mediaNewsStructureSeries'), fmt('mediaNewsStructureSeriesLine', days));
-            if (includeEpisodes) lines.push('', t('mediaNewsStructureEpisodes'), fmt('mediaNewsStructureEpisodesLine', days));
+        // lookback-days), rather than the actual movie/show titles that would be found. Used ONLY
+        // by the two "Send automatically every 7 days" preview buttons (the shared auto-send
+        // form, and the saved-config card) - added 2026-08-24 per user feedback: admins just want
+        // to check the automatic message's shape/wording there, not preview real library content.
+        // The "Send Media News Now" button's own preview was DELIBERATELY reverted back to a real
+        // server-side preview (see the .medianews-preview-btn handler below) - unlike the weekly
+        // auto-send, that button sends immediately on click, so its preview needs to show what
+        // would actually go out, not just the shape.
+        //
+        // hasMovieLibrary/hasSeriesLibrary (see getMediaNewsLibraryTypeFlags above) replace the
+        // single "any library selected" flag this used to take (2026-08-28): "New Movies" is now
+        // shown only when a movie-capable library is selected, and "New TV Shows"/"New Episodes"
+        // only when BOTH a series-capable library is selected AND the respective checkbox is on.
+        // With neither a movie- nor series-capable library selected (which, given every listed
+        // library is movies/tvshows/mixed/unset - see MEDIANEWS_SUPPORTED_CONTENT_TYPES - only
+        // happens when nothing at all is checked), the "no library selected" line is shown instead
+        // of an empty/misleading set of sections.
+        function buildMediaNewsStructureLines(header, days, includeSeries, includeEpisodes, hasMovieLibrary, hasSeriesLibrary) {
+            var lines = ['[' + header + ']'];
+            if (!hasMovieLibrary && !hasSeriesLibrary) {
+                lines.push(t('mediaNewsStructureNoLibrary'));
+                return lines.join('\n');
+            }
+            if (hasMovieLibrary) lines.push(t('mediaNewsStructureMovies'), fmt('mediaNewsStructureMoviesLine', days));
+            if (hasSeriesLibrary && includeSeries) lines.push('', t('mediaNewsStructureSeries'), fmt('mediaNewsStructureSeriesLine', days));
+            if (hasSeriesLibrary && includeEpisodes) lines.push('', t('mediaNewsStructureEpisodes'), fmt('mediaNewsStructureEpisodesLine', days));
             return lines.join('\n');
         }
 
-        // For the two form-based preview buttons (main section + auto-send fields) - reads
-        // straight from whatever is currently in the form, matching what buildMediaNewsPayload()
-        // above would send.
+        // For the auto-send form's own preview button - reads straight from whatever is
+        // currently in the shared form fields (including the library checkboxes), matching what
+        // buildMediaNewsPayload()/the auto-send save payload would use.
         function buildMediaNewsStructurePreviewText() {
             var header = view.querySelector('.medianews-header').value.trim() || t('defaultMediaNewsHeader');
             var days = parseInt(view.querySelector('.medianews-days').value, 10) || 7;
-            return buildMediaNewsStructureLines(header, days, getIncludeNewSeries(), getIncludeNewEpisodes());
+            var flags = getMediaNewsLibraryTypeFlags(getSelectedLibraryIds());
+            return buildMediaNewsStructureLines(header, days, getIncludeNewSeries(), getIncludeNewEpisodes(), flags.hasMovie, flags.hasSeries);
         }
 
         // For the "upcoming auto-send" card's saved-config preview - reads from the SAVED
         // MediaNewsAutoStatusDto (see renderMediaNewsAutoStatus below) rather than the form, same
         // "saved, not whatever's unsaved in the form" distinction the old PreviewSaved endpoint
-        // existed for.
+        // existed for. HasMovieLibrarySelected/HasSeriesLibrarySelected come from the server (see
+        // EmbyCastApi.cs's MediaNewsAutoStatusDto) since this DTO otherwise carries no library
+        // information at all.
         function buildMediaNewsStructurePreviewTextFromStatus(status) {
             var header = (status && status.Header) || t('defaultMediaNewsHeader');
             var days = (status && status.LookbackDays) || 7;
-            return buildMediaNewsStructureLines(header, days, !!(status && status.IncludeNewSeries), !!(status && status.IncludeNewEpisodes));
+            return buildMediaNewsStructureLines(header, days, !!(status && status.IncludeNewSeries), !!(status && status.IncludeNewEpisodes),
+                !!(status && status.HasMovieLibrarySelected), !!(status && status.HasSeriesLibrarySelected));
         }
 
         // Sets a preview button/box pair to a definite shown/hidden state - tracked via a
@@ -1995,16 +2043,19 @@ define(['baseView'], function (BaseView) {
 
         // Shared by all three "Preview" buttons on this card (main section, auto-send section,
         // and the "upcoming auto-send" card's own button) - each passes its own preview/status
-        // elements and its own text-producing function. All three now build a purely structural
-        // preview client-side (see buildMediaNewsStructurePreviewText[FromStatus]) rather than
-        // hitting the server for real content - fetchPromiseFn is still a Promise-returning
-        // function (resolved immediately, via Promise.resolve) so this toggle/show/hide/close-
-        // button plumbing didn't need to change. Toggles: a second click while already shown just
-        // hides it again - only a click while hidden (re)builds the text.
+        // elements and its own text-producing function. The main-section button's fetchPromiseFn
+        // hits the real server endpoint (EmbyCast/MediaNews/Preview - see its own handler below);
+        // the two auto-send buttons instead build a purely structural preview client-side (see
+        // buildMediaNewsStructurePreviewText[FromStatus]) and just wrap it in Promise.resolve so
+        // this same toggle/show/hide/close-button plumbing works for both kinds unchanged.
+        // Toggles: a second click while already shown just hides it again - only a click while
+        // hidden (re)builds/refetches the text.
         //
         // validateFn (optional) runs only when about to SHOW a new preview (not when just hiding
-        // an already-shown one) - currently unused (the structural preview has nothing to
-        // validate), kept for any future preview kind that needs it.
+        // an already-shown one) - used by the main-section button to require a library selection
+        // before hitting the server (same guard the send button itself applies); the two
+        // structural auto-send previews pass none, since they show their own "no library
+        // selected" line inline instead (see buildMediaNewsStructureLines).
         function toggleMediaNewsPreview(btn, previewEl, statusEl, fetchPromiseFn, validateFn) {
             if (previewEl.dataset.shown === '1') {
                 setPreviewShown(btn, previewEl, false);
@@ -2045,11 +2096,13 @@ define(['baseView'], function (BaseView) {
 
         view.querySelector('.medianews-preview-btn').addEventListener('click', function () {
             var btn = this;
-            // Purely structural preview, built client-side - no request, no library-selection
-            // guard (the structure doesn't depend on which libraries are picked). See
-            // buildMediaNewsStructurePreviewText().
+            // "Send Media News Now" sends immediately on click, so its preview must show the
+            // real message that would go out - real server-side content preview (hits the
+            // library, same as an actual send would), not the structural placeholder used by the
+            // two auto-send preview buttons below. See toggleMediaNewsPreview's doc comment.
             toggleMediaNewsPreview(btn, view.querySelector('.medianews-preview'), view.querySelector('.medianews-status'),
-                function () { return Promise.resolve({ Text: buildMediaNewsStructurePreviewText() }); });
+                function () { return ajax('POST', 'EmbyCast/MediaNews/Preview', buildMediaNewsPayload()); },
+                function () { return getSelectedLibraryIds().length === 0 ? t('msgPleaseSelectLibrary') : null; });
         });
 
         view.querySelector('.medianews-send').addEventListener('click', function () {
@@ -2611,8 +2664,19 @@ define(['baseView'], function (BaseView) {
                 return;
             }
 
+            // Mirrors the server-side floor in MessageStore.AddHistory (Math.Max(20, maxEntries))
+            // and the min/max on the <input> itself - kept in sync so a value the server would
+            // silently clamp anyway is instead rejected here with a clear message.
+            var maxEntriesField = view.querySelector('.cleanup-history-max-entries');
+            var maxEntries = parseInt(maxEntriesField.value, 10);
+            if (isNaN(maxEntries) || maxEntries < 20 || maxEntries > 5000) {
+                showStatus(statusEl, fmt('msgMaxEntriesOutOfRange', 20, 5000), 'err');
+                return;
+            }
+
             pluginConfig.OfflineMessageMaxAgeDays = offlineDays;
             pluginConfig.HistoryMaxAgeDays = historyDays;
+            pluginConfig.HistoryMaxEntries = maxEntries;
             var types = getCleanupTypeCheckboxes();
             pluginConfig.HistoryCleanupIncludeInstant = types.IncludeInstant;
             pluginConfig.HistoryCleanupIncludeScheduled = types.IncludeScheduled;
@@ -3079,6 +3143,7 @@ define(['baseView'], function (BaseView) {
 
                 view.querySelector('.cleanup-offline-days').value = config.OfflineMessageMaxAgeDays || 7;
                 view.querySelector('.cleanup-history-days').value = config.HistoryMaxAgeDays || 14;
+                view.querySelector('.cleanup-history-max-entries').value = config.HistoryMaxEntries || 300;
                 view.querySelector('.cleanup-type-instant').checked = config.HistoryCleanupIncludeInstant !== false;
                 view.querySelector('.cleanup-type-scheduled').checked = config.HistoryCleanupIncludeScheduled !== false;
                 view.querySelector('.cleanup-type-timer').checked = config.HistoryCleanupIncludeTimer !== false;

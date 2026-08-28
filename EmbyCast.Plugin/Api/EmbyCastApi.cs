@@ -190,6 +190,20 @@ namespace EmbyCast.Plugin.Api
         /// different, unsaved) checkboxes currently sitting in the form above.</summary>
         public bool IncludeNewSeries { get; set; }
         public bool IncludeNewEpisodes { get; set; }
+        /// <summary>True when at least one of the saved libraries (MediaNewsLibraryIdsCsv) is
+        /// typed "movies" or "mixed"/unset - i.e. could ever actually contribute a movie.
+        /// MediaNewsService.BuildSinceDays filters purely by folder path, not content type, so a
+        /// library typed "tvshows" can never contain a movie item and a "New Movies" section
+        /// would always end up empty (and therefore omitted) in the real send - see
+        /// config.js's buildMediaNewsStructurePreviewTextFromStatus, which uses this instead of
+        /// showing "New Movies" whenever ANY library at all is selected.</summary>
+        public bool HasMovieLibrarySelected { get; set; }
+        /// <summary>Same as HasMovieLibrarySelected above, but for series/episodes: true when at
+        /// least one saved library is typed "tvshows" or "mixed"/unset. A library typed "movies"
+        /// can never contain a Series/Episode item, so "New TV Shows"/"New Episodes" should not
+        /// be shown in the structural preview just because the "Series entries" checkboxes are
+        /// on and SOME library (possibly movies-only) is selected.</summary>
+        public bool HasSeriesLibrarySelected { get; set; }
     }
 
     [Authenticated(Roles = "Admin")]
@@ -632,6 +646,7 @@ namespace EmbyCast.Plugin.Api
         public object Get(GetMediaNewsAutoStatus request)
         {
             var config = P.Configuration;
+            var typeFlags = ResolveMediaNewsLibraryTypeFlags(config.MediaNewsLibraryIdsCsv);
             return new MediaNewsAutoStatusDto
             {
                 Enabled = config.MediaNewsAutoSendEnabled,
@@ -645,7 +660,9 @@ namespace EmbyCast.Plugin.Api
                 RecipientMode = config.MediaNewsRecipientMode,
                 LookbackDays = config.MediaNewsLookbackDays,
                 IncludeNewSeries = config.MediaNewsIncludeNewSeries,
-                IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes
+                IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes,
+                HasMovieLibrarySelected = typeFlags.HasMovieLibrary,
+                HasSeriesLibrarySelected = typeFlags.HasSeriesLibrary
             };
         }
 
@@ -668,6 +685,7 @@ namespace EmbyCast.Plugin.Api
             config.MediaNewsEpisodeTemplate = request.EpisodeTemplate;
             P.PersistConfiguration(config);
 
+            var typeFlags = ResolveMediaNewsLibraryTypeFlags(config.MediaNewsLibraryIdsCsv);
             return new MediaNewsAutoStatusDto
             {
                 Enabled = config.MediaNewsAutoSendEnabled,
@@ -681,8 +699,49 @@ namespace EmbyCast.Plugin.Api
                 RecipientMode = config.MediaNewsRecipientMode,
                 LookbackDays = config.MediaNewsLookbackDays,
                 IncludeNewSeries = config.MediaNewsIncludeNewSeries,
-                IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes
+                IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes,
+                HasMovieLibrarySelected = typeFlags.HasMovieLibrary,
+                HasSeriesLibrarySelected = typeFlags.HasSeriesLibrary
             };
+        }
+
+        /// <summary>Shared by Get(GetMediaNewsAutoStatus)/Post(SaveMediaNewsAutoConfig). Resolves
+        /// which content categories the saved library selection could ever actually contribute,
+        /// mirroring MediaNewsService.BuildSinceDays's real filtering closely enough for preview
+        /// purposes: that method filters purely by folder PATH, not by a library's configured
+        /// content type, so a library typed "movies" can never yield a Series/Episode item (and
+        /// vice versa) while a "mixed"/unset-type library could contain either. Used only to
+        /// steer the dashboard's structural auto-send preview (see MediaNewsAutoStatusDto's
+        /// HasMovieLibrarySelected/HasSeriesLibrarySelected doc comments and config.js's
+        /// buildMediaNewsStructurePreviewTextFromStatus) - never affects the real send itself.
+        /// Returns (false, false) when the CSV is empty/blank, when the library manager can't be
+        /// resolved, or when none of the saved ids match a currently-known library (e.g.
+        /// deleted/recreated since it was selected).</summary>
+        private static (bool HasMovieLibrary, bool HasSeriesLibrary) ResolveMediaNewsLibraryTypeFlags(string libraryIdsCsv)
+        {
+            if (string.IsNullOrWhiteSpace(libraryIdsCsv))
+                return (false, false);
+
+            var wanted = new HashSet<string>(
+                libraryIdsCsv.Split(',').Select(s => s.Trim()).Where(s => s.Length > 0),
+                StringComparer.OrdinalIgnoreCase);
+            if (wanted.Count == 0)
+                return (false, false);
+
+            var libraryManager = P.ApplicationHost.Resolve<ILibraryManager>();
+            if (libraryManager == null)
+                return (false, false);
+
+            var hasMovie = false;
+            var hasSeries = false;
+            foreach (var lib in P.MediaNews.GetLibraries(libraryManager))
+            {
+                if (string.IsNullOrEmpty(lib.Id) || !wanted.Contains(lib.Id)) continue;
+                var type = (lib.ContentType ?? "").Trim().ToLowerInvariant();
+                if (type == "movies" || type == "mixed" || type == "") hasMovie = true;
+                if (type == "tvshows" || type == "mixed" || type == "") hasSeries = true;
+            }
+            return (hasMovie, hasSeries);
         }
 
         public object Get(GetLibraries request)
