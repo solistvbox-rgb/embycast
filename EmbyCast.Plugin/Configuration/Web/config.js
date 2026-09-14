@@ -124,12 +124,14 @@ define(['baseView'], function (BaseView) {
             lastSentNever: 'Last sent: never',
             autoCardRecipient: 'sent to {0}',
             autoCardPeriod: 'period: last {0} day(s)',
+            autoCardWebOnly: 'web-browser sessions only',
 
             msgSending: 'Sending…',
             msgPleaseEnterMessage: 'Please enter a message before sending.',
             msgPleaseSelectUsers: 'Please select at least one user.',
             msgPleaseSelectLibrary: 'Please select at least one library first.',
             msgPleaseSelectLibraryForAuto: 'Please select at least one library before enabling automatic sending.',
+            msgPleaseSelectSeriesEntries: 'The selected library only contains TV shows, but neither "Newly added series" nor "New episodes" is checked - nothing would ever be sent. Please check at least one of them, or also select a movie library.',
             msgPleaseSetDateTime: 'Please choose a date and time in the future.',
             msgSent: 'Sent - {0} delivered, {1} pending, {2} failed.',
             msgScheduleCreated: 'Message scheduled.',
@@ -381,12 +383,14 @@ define(['baseView'], function (BaseView) {
             lastSentNever: 'Zuletzt gesendet: nie',
             autoCardRecipient: 'wird an {0} versandt',
             autoCardPeriod: 'Zeitraum letzte {0} Tage',
+            autoCardWebOnly: 'nur Web-Browser-Sitzungen',
 
             msgSending: 'Wird gesendet…',
             msgPleaseEnterMessage: 'Bitte eine Nachricht eingeben, bevor gesendet wird.',
             msgPleaseSelectUsers: 'Bitte mindestens einen User auswählen.',
             msgPleaseSelectLibrary: 'Bitte zuerst mindestens eine Bibliothek auswählen.',
             msgPleaseSelectLibraryForAuto: 'Bitte mindestens eine Bibliothek auswählen, bevor der automatische Versand aktiviert wird.',
+            msgPleaseSelectSeriesEntries: 'Die ausgewählte Bibliothek enthält nur Serien, aber weder "Neu hinzugefügte Serien" noch "Neue Episoden" ist angehakt - es würde nie etwas gesendet. Bitte mindestens eine dieser Optionen ankreuzen, oder zusätzlich eine Film-Bibliothek auswählen.',
             msgPleaseSetDateTime: 'Bitte ein Datum und eine Uhrzeit in der Zukunft wählen.',
             msgSent: 'Gesendet - {0} zugestellt, {1} ausstehend, {2} fehlgeschlagen.',
             msgScheduleCreated: 'Nachricht terminiert.',
@@ -1121,6 +1125,7 @@ define(['baseView'], function (BaseView) {
                     loadUsersAndSessions();
                     return;
                 }
+                if (result && result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
                 closeGroupForm();
                 showStatus(view.querySelector('.groups-status'), t('msgGroupSaved'), 'ok');
                 loadUsersAndSessions();
@@ -1404,6 +1409,7 @@ define(['baseView'], function (BaseView) {
                     loadScheduled();
                     return;
                 }
+                if (result && result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
                 showStatus(statusEl, t(editingId ? 'msgScheduleUpdated' : 'msgScheduleCreated'), 'ok');
                 if (editingId) {
                     cancelEditingScheduled();
@@ -1448,7 +1454,7 @@ define(['baseView'], function (BaseView) {
             items.forEach(function (s) {
                 var row = document.createElement('div');
                 row.className = 'bcm-history-item';
-                var when = new Date(s.SendAtUtc).toLocaleString();
+                var when = localeDateTimeString(new Date(s.SendAtUtc));
                 row.innerHTML =
                     '<div class="bcm-history-head">' +
                     '<span><strong>' + esc(s.Header) + '</strong> &mdash; ' + esc(when) + '</span>' +
@@ -1711,6 +1717,7 @@ define(['baseView'], function (BaseView) {
                 // Post(StartTimer)'s guard, which returns {Success:false, AlreadyExists:true}
                 // (a normal 200 response, not a thrown error) precisely so this can show a clear,
                 // specific status message instead of a generic "Error: ...".
+                if (result && result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
                 if (result && result.Success === false) {
                     showStatus(statusEl, t('msgTimerAlreadyExists'), 'err');
                     return;
@@ -1784,7 +1791,7 @@ define(['baseView'], function (BaseView) {
                 el.innerHTML = '';
                 return;
             }
-            var when = fmt('timerStartsAt', new Date(status.ScheduledStartUtc).toLocaleString());
+            var when = fmt('timerStartsAt', localeDateTimeString(new Date(status.ScheduledStartUtc)));
             el.innerHTML =
                 '<div class="bcm-history-item">' +
                 '<div class="bcm-history-head">' +
@@ -1978,6 +1985,33 @@ define(['baseView'], function (BaseView) {
             return { hasMovie: hasMovie, hasSeries: hasSeries };
         }
 
+        // Returns a red validation message when the CURRENTLY SELECTED libraries + "Series
+        // entries" checkboxes can never produce anything to send, or null when the selection is
+        // fine. Two distinct cases, same as before, plus one new one added 2026-09-08 per admin
+        // report:
+        //  - no library selected at all (libraryOnlyMessageKey - existing msgPleaseSelectLibrary /
+        //    msgPleaseSelectLibraryForAuto, picked by the caller since the wording differs
+        //    slightly between "before sending" and "before enabling automatic sending").
+        //  - only series-capable (tvshows/mixed) libraries selected, but NEITHER "Newly added
+        //    series" nor "New episodes" is checked - previously this silently fell through to the
+        //    generic "no new media in the selected period" message (or, for the auto-send
+        //    structural preview, an empty-looking box with just the header), which incorrectly
+        //    reads as "nothing new happened" when the real problem is a config mistake that would
+        //    stay empty FOREVER until a checkbox is ticked. A movie-capable library needs no such
+        //    checkbox of its own - see buildMediaNewsStructureLines - so this only fires when
+        //    there's no movie-capable library in the mix either.
+        // Shared by the main "Show preview" button, the "Send Media News Now" button, the
+        // auto-send section's own "Show preview" button, and "Save Auto-send Settings".
+        function getMediaNewsSelectionError(libraryOnlyMessageKey) {
+            var ids = getSelectedLibraryIds();
+            if (ids.length === 0) return t(libraryOnlyMessageKey);
+            var flags = getMediaNewsLibraryTypeFlags(ids);
+            if (!flags.hasMovie && flags.hasSeries && !getIncludeNewSeries() && !getIncludeNewEpisodes()) {
+                return t('msgPleaseSelectSeriesEntries');
+            }
+            return null;
+        }
+
         // Builds a purely structural preview of the message - the section labels and a
         // placeholder-style description line for each (using the currently configured Header and
         // lookback-days), rather than the actual movie/show titles that would be found. Used ONLY
@@ -2052,10 +2086,13 @@ define(['baseView'], function (BaseView) {
         // hidden (re)builds/refetches the text.
         //
         // validateFn (optional) runs only when about to SHOW a new preview (not when just hiding
-        // an already-shown one) - used by the main-section button to require a library selection
-        // before hitting the server (same guard the send button itself applies); the two
-        // structural auto-send previews pass none, since they show their own "no library
-        // selected" line inline instead (see buildMediaNewsStructureLines).
+        // an already-shown one) - used by the main-section button AND the auto-send form's own
+        // button (both via getMediaNewsSelectionError) to require a valid library/series-checkbox
+        // selection before showing anything (same guard the send button itself applies) - added
+        // 2026-09-08 for the auto-send button specifically, per admin report that it used to show
+        // an unhelpful bare "[Header]" box (or nothing distinguishing) instead of a clear error.
+        // Only the "upcoming auto-send" card's own saved-config preview button passes none, since
+        // a saved config that was valid at save time needs no further gating here.
         function toggleMediaNewsPreview(btn, previewEl, statusEl, fetchPromiseFn, validateFn) {
             if (previewEl.dataset.shown === '1') {
                 setPreviewShown(btn, previewEl, false);
@@ -2102,11 +2139,16 @@ define(['baseView'], function (BaseView) {
             // two auto-send preview buttons below. See toggleMediaNewsPreview's doc comment.
             toggleMediaNewsPreview(btn, view.querySelector('.medianews-preview'), view.querySelector('.medianews-status'),
                 function () { return ajax('POST', 'EmbyCast/MediaNews/Preview', buildMediaNewsPayload()); },
-                function () { return getSelectedLibraryIds().length === 0 ? t('msgPleaseSelectLibrary') : null; });
+                function () { return getMediaNewsSelectionError('msgPleaseSelectLibrary'); });
         });
 
         view.querySelector('.medianews-send').addEventListener('click', function () {
             var statusEl = view.querySelector('.medianews-status');
+            // Same selection check the preview button already uses (see its own validateFn just
+            // above) - catches "TV-only library, no series checkbox" before it even reaches the
+            // server, instead of only after a round trip that would just report "no new media".
+            var selectionError = getMediaNewsSelectionError('msgPleaseSelectLibrary');
+            if (selectionError) { showStatus(statusEl, selectionError, 'err'); return; }
             var mode = getRecipientMode('medianews');
             var userIds = mode === 'Specific' ? getSelectedUserIds('medianews') : [];
             var groupIds = mode === 'Specific' ? getSelectedGroupIds('medianews') : [];
@@ -2201,7 +2243,12 @@ define(['baseView'], function (BaseView) {
                 SpecificGroupIdsCsv: getSelectedGroupIds('medianews').join(','),
                 SkipWhenEmpty: true,
                 Header: view.querySelector('.medianews-header').value.trim() || t('defaultMediaNewsHeader'),
-                IncludeNewSeries: getIncludeNewSeries(), IncludeNewEpisodes: getIncludeNewEpisodes(), EpisodeTemplate: getEpisodeTemplate()
+                IncludeNewSeries: getIncludeNewSeries(), IncludeNewEpisodes: getIncludeNewEpisodes(), EpisodeTemplate: getEpisodeTemplate(),
+                // Shared with the manual "Send Media News Now" checkbox above (same element,
+                // same reasoning as RecipientMode/LibraryIdsCsv/etc.) - only actually applies to
+                // the recurring weekly job once "Save Auto-send Settings" is clicked, same as
+                // every other field built here. See PluginConfiguration.MediaNewsAutoWebOnly.
+                WebOnly: view.querySelector('.medianews-webonly').checked
             };
         }
 
@@ -2224,20 +2271,25 @@ define(['baseView'], function (BaseView) {
             if (payload.IncludeNewSeries) seriesBits.push(t('seriesModeNewSeries'));
             if (payload.IncludeNewEpisodes) seriesBits.push(t('seriesModeNewEpisodes'));
 
-            return [
+            var lines = [
                 t('labelWeekday') + ': ' + t('day' + localDay) + ', ' + t('labelTime') + ': ' + localTime,
                 t('labelLookbackDays') + ': ' + payload.LookbackDays,
                 t('labelHeader') + ': ' + payload.Header,
                 t('labelLibraries') + ': ' + (libNames.length ? libNames.join(', ') : t('valueNoneSelected')),
                 t('labelSeriesMode') + ': ' + (seriesBits.length ? seriesBits.join(' / ') : t('valueNoneSelected')),
                 t('labelRecipients') + ': ' + t(recipientKey)
-            ].join('\n');
+            ];
+            // Only called out when on, same as the saved-status card below (renderMediaNewsAutoStatus)
+            // - keeps the confirmation summary short for the (still default) common case.
+            if (payload.WebOnly) lines.push(t('labelWebOnly') + ': ' + t('autoCardWebOnly'));
+            return lines.join('\n');
         }
 
         view.querySelector('.medianews-auto-preview-btn').addEventListener('click', function () {
             var btn = this;
             toggleMediaNewsPreview(btn, view.querySelector('.medianews-auto-preview'), view.querySelector('.medianews-auto-status'),
-                function () { return Promise.resolve({ Text: buildMediaNewsStructurePreviewText() }); });
+                function () { return Promise.resolve({ Text: buildMediaNewsStructurePreviewText() }); },
+                function () { return getMediaNewsSelectionError('msgPleaseSelectLibraryForAuto'); });
         });
 
         view.querySelector('.medianews-auto-save').addEventListener('click', function () {
@@ -2253,16 +2305,19 @@ define(['baseView'], function (BaseView) {
                 showStatus(statusEl, t('msgPleaseCheckAutoSend'), 'err');
                 return;
             }
-            // Enabling automatic sending with no library checked would silently never send
-            // anything, ever, forever. (MediaNewsAutoScheduler also independently guards against
-            // this server-side, in case an admin already had Enabled=true with no library saved
+            // Enabling automatic sending with no library checked - or a TV-only library with
+            // neither "Series entries" checkbox on - would silently never send anything, ever,
+            // forever. (MediaNewsAutoScheduler also independently guards against the no-library
+            // case server-side, in case an admin already had Enabled=true with no library saved
             // before this check existed - see its own "no library selected" log warning.)
-            if (payload.LibraryIdsCsv === '') {
-                showStatus(statusEl, t('msgPleaseSelectLibraryForAuto'), 'err');
+            var selectionError = getMediaNewsSelectionError('msgPleaseSelectLibraryForAuto');
+            if (selectionError) {
+                showStatus(statusEl, selectionError, 'err');
                 return;
             }
             if (!window.confirm(fmt('msgConfirmSaveAutoConfig', buildAutoConfigSummaryText(payload)))) return;
             ajax('POST', 'EmbyCast/MediaNews/AutoConfig', payload).then(function (status) {
+                if (status && status.Error) { showStatus(statusEl, t('errorPrefix') + status.Error, 'err'); return; }
                 showStatus(statusEl, t('msgAutoSettingsSaved'), 'ok');
                 renderMediaNewsAutoStatus(status);
             }, function (err) {
@@ -2287,13 +2342,50 @@ define(['baseView'], function (BaseView) {
             });
         }
 
+        // Emby's own "Date/time locale" dashboard setting (Emby Web Settings -> General) is NOT
+        // stored server-side - it lives only in the browser's localStorage under the key
+        // "datetimelocale" (e.g. "en-GB"), written by Emby's own web client. Without reading it,
+        // every toLocale*String() call below falls back to the browser's own default locale,
+        // which often doesn't match what the admin actually configured for the rest of Emby (e.g.
+        // seeing US-style dates while every other Emby page shows UK/24h style). Added 2026-09-07
+        // per admin request.
+        //
+        // Returns undefined (== "use the runtime default locale", the exact previous behavior)
+        // when the setting is on "Auto" (key absent/empty), when localStorage itself isn't
+        // available (some embedded/kiosk browser contexts disable it), or when the stored value
+        // isn't a locale Intl actually recognizes (Intl.DateTimeFormat throws for a garbage
+        // string) - so this can never make date/time display WORSE than before, only better when
+        // a valid explicit locale is set.
+        function getEmbyDateTimeLocale() {
+            try {
+                var loc = window.localStorage && localStorage.getItem('datetimelocale');
+                if (loc) {
+                    new Intl.DateTimeFormat(loc); // throws for an invalid/unrecognized locale
+                    return loc;
+                }
+            } catch (e) { /* localStorage unavailable, or invalid locale - fall through */ }
+            return undefined;
+        }
+
+        function localeDateString(date) {
+            return date.toLocaleDateString(getEmbyDateTimeLocale());
+        }
+
+        function localeTimeString(date, opts) {
+            return date.toLocaleTimeString(getEmbyDateTimeLocale(), opts);
+        }
+
+        function localeDateTimeString(date) {
+            return date.toLocaleString(getEmbyDateTimeLocale());
+        }
+
         // Local date/time formatting without seconds, e.g. "20.8.2026, 20:00" (de) / "8/20/2026,
         // 8:00 PM" (en) - matches the user's requested card format, which shows minute precision
         // only (the default toLocaleString() included seconds, which looked noisy/overly precise
         // for a weekly recurring send).
         function formatDateNoSeconds(iso) {
             var d = new Date(iso);
-            return d.toLocaleDateString() + ', ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return localeDateString(d) + ', ' + localeTimeString(d, { hour: '2-digit', minute: '2-digit' });
         }
 
         // Renders the "upcoming auto-send" card (header + next run + recipient mode + lookback
@@ -2328,6 +2420,9 @@ define(['baseView'], function (BaseView) {
                 var periodText = fmt('autoCardPeriod', status.LookbackDays || 7);
                 var infoLine = '<strong>' + esc(header) + '</strong> &mdash; ' + esc(when) +
                     ' &mdash; ' + esc(recipientText) + ' &mdash; ' + esc(periodText);
+                // Only called out when the saved job is actually web-only - avoids cluttering the
+                // card's info line for the (still default) common case of "all session types".
+                if (status.WebOnly) infoLine += ' &mdash; ' + esc(t('autoCardWebOnly'));
 
                 upcomingEl.innerHTML =
                     '<div class="bcm-history-item">' +
@@ -2372,23 +2467,36 @@ define(['baseView'], function (BaseView) {
         // one of those buttons was also clicked, which was confusing). enabledOverride is always
         // passed explicitly from the switch's own event so the persisted value matches exactly
         // what the admin just set.
+        //
+        // Uses the dedicated EmbyCast/Welcome/Save endpoint (added 2026-09-07) instead of Emby's
+        // generic ApiClient.updatePluginConfiguration() this used to call directly - that generic
+        // path saves the whole PluginConfiguration blob with no per-field validation hook, so
+        // there was no way to reject an over-long Header server-side. Language is still sent
+        // along (see SaveWelcomeMessage.Language's doc comment in EmbyCastApi.cs) since this was
+        // the only place that ever persisted it. Because this endpoint only touches Welcome's own
+        // fields, Dashboard.processPluginConfigurationUpdateResult() is no longer called either -
+        // that hook only makes sense after the generic whole-config save, and no other
+        // already-dedicated endpoint in this file (e.g. SaveMediaNewsAutoConfig) calls it.
         function saveWelcomeConfig(enabledOverride, successKey) {
             var statusEl = view.querySelector('.welcome-status');
             if (!pluginConfig) return;
             var toggleEl = view.querySelector('.welcome-enabled');
             var enabled = enabledOverride !== undefined ? enabledOverride : toggleEl.checked;
             var previousEnabled = pluginConfig.WelcomeMessageEnabled;
-            pluginConfig.WelcomeMessageEnabled = enabled;
-            pluginConfig.WelcomeMessageHeader = view.querySelector('.welcome-header').value.trim() || t('defaultWelcomeHeader');
-            pluginConfig.WelcomeMessageText = view.querySelector('.welcome-text').value.trim();
-            pluginConfig.Language = currentLang;
+            var header = view.querySelector('.welcome-header').value.trim() || t('defaultWelcomeHeader');
+            var text = view.querySelector('.welcome-text').value.trim();
 
-            ApiClient.updatePluginConfiguration(PLUGIN_ID, pluginConfig).then(function (result) {
-                toggleEl.checked = enabled;
-                showStatus(statusEl, t(successKey), 'ok');
-                if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
-                    try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
+            ajax('POST', 'EmbyCast/Welcome/Save', { Enabled: enabled, Header: header, Text: text, Language: currentLang }).then(function (result) {
+                if (result && result.Error) {
+                    showStatus(statusEl, t('errorPrefix') + result.Error, 'err');
+                    return;
                 }
+                pluginConfig.WelcomeMessageEnabled = result.Enabled;
+                pluginConfig.WelcomeMessageHeader = result.Header;
+                pluginConfig.WelcomeMessageText = result.Text;
+                pluginConfig.Language = currentLang;
+                toggleEl.checked = result.Enabled;
+                showStatus(statusEl, t(successKey), 'ok');
                 renderTileBadges();
             }, function (err) {
                 // Roll the switch (and pluginConfig's in-memory copy) back to whatever was
@@ -2418,7 +2526,11 @@ define(['baseView'], function (BaseView) {
             var el = view.querySelector('.welcome-mark-lastrun');
             if (!el) return;
             if (!lastRunUtc) { el.style.display = 'none'; return; }
-            var dateText = new Date(lastRunUtc).toLocaleDateString();
+            // Date + time (no seconds), same helper/format used everywhere else on this page a
+            // "when did this happen" timestamp is shown (scheduled messages, timer starts,
+            // tile badges) - date-only here previously made it impossible to tell apart two runs
+            // on the same day. See formatDateNoSeconds's own doc comment.
+            var dateText = formatDateNoSeconds(lastRunUtc);
             el.textContent = fmt('noteMarkExistingUsersLastRun', dateText, count || 0);
             el.style.display = '';
         }
@@ -2429,7 +2541,7 @@ define(['baseView'], function (BaseView) {
             var el = view.querySelector('.welcome-unmark-lastrun');
             if (!el) return;
             if (!lastRunUtc) { el.style.display = 'none'; return; }
-            var dateText = new Date(lastRunUtc).toLocaleDateString();
+            var dateText = formatDateNoSeconds(lastRunUtc);
             el.textContent = fmt('noteUnmarkExistingUsersLastRun', dateText, count || 0);
             el.style.display = '';
         }
@@ -3001,7 +3113,7 @@ define(['baseView'], function (BaseView) {
             (lastScheduledItems || []).forEach(function (s) {
                 items.push({
                     title: s.Header,
-                    sub: new Date(s.SendAtUtc).toLocaleString() + ' · ' + recipientSummaryText(s),
+                    sub: localeDateTimeString(new Date(s.SendAtUtc)) + ' · ' + recipientSummaryText(s),
                     targetKey: 'scheduled'
                 });
             });
@@ -3014,7 +3126,7 @@ define(['baseView'], function (BaseView) {
             } else if (lastTimerPending) {
                 items.push({
                     title: t('openOrderTimerScheduled'),
-                    sub: fmt('timerStartsAt', new Date(lastTimerPending.ScheduledStartUtc).toLocaleString()),
+                    sub: fmt('timerStartsAt', localeDateTimeString(new Date(lastTimerPending.ScheduledStartUtc))),
                     targetKey: 'timer'
                 });
             }

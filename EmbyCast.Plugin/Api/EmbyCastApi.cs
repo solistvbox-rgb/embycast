@@ -204,6 +204,17 @@ namespace EmbyCast.Plugin.Api
         /// be shown in the structural preview just because the "Series entries" checkboxes are
         /// on and SOME library (possibly movies-only) is selected.</summary>
         public bool HasSeriesLibrarySelected { get; set; }
+        /// <summary>Echoes MediaNewsAutoWebOnly, same reasoning as Header/RecipientMode/
+        /// LookbackDays above - lets the dashboard's "upcoming auto-send" card show whether the
+        /// SAVED job is web-browser-only, without relying on the (possibly different, unsaved)
+        /// "Send only to web-browser sessions" checkbox currently sitting in the form above.</summary>
+        public bool WebOnly { get; set; }
+        /// <summary>Set (only) when Post(SaveMediaNewsAutoConfig) rejects the request - e.g.
+        /// Header or EpisodeTemplate over their length limit - instead of persisting anything.
+        /// Still a normal 200 response, same "Error field, not a thrown HTTP error" convention
+        /// used throughout this file (see SendResultDto.Error) - config.js's .medianews-auto-save
+        /// handler checks this before treating the response as a successful save.</summary>
+        public string Error { get; set; }
     }
 
     [Authenticated(Roles = "Admin")]
@@ -230,6 +241,9 @@ namespace EmbyCast.Plugin.Api
         public bool IncludeNewSeries { get; set; } = true;
         public bool IncludeNewEpisodes { get; set; } = false;
         public string EpisodeTemplate { get; set; }
+        /// <summary>"Send only to web-browser sessions" for the recurring weekly job - see
+        /// PluginConfiguration.MediaNewsAutoWebOnly's doc comment.</summary>
+        public bool WebOnly { get; set; } = false;
     }
 
     [Authenticated(Roles = "Admin")]
@@ -292,6 +306,45 @@ namespace EmbyCast.Plugin.Api
     public class DeleteGroup : IReturn<object>
     {
         public string Id { get; set; }
+    }
+
+    // ---- Welcome message: save Enabled/Header/Text ------------------------
+
+    /// <summary>Added 2026-09-07 so Header/Text can be length-validated server-side (rejecting an
+    /// over-long Header, truncating an over-long Text) the same way every other message type
+    /// already is. Previously Welcome's Enabled/Header/Text were saved via Emby's own generic
+    /// ApiClient.updatePluginConfiguration() (the whole PluginConfiguration blob at once) - there
+    /// is no per-field validation hook available on that generic path without overriding an
+    /// unverified BasePlugin SDK member (no compiler in this project to check such an override
+    /// against this Emby SDK version - see MediaNewsService.cs's doc comment on the same
+    /// caution), so this dedicated endpoint exists instead, mirroring the same pattern
+    /// SaveMediaNewsAutoConfig already uses for its own PluginConfiguration fields.</summary>
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Welcome/Save", "POST", Summary = "Save the welcome message (enabled/header/text)")]
+    public class SaveWelcomeMessage : IReturn<WelcomeMessageDto>
+    {
+        public bool Enabled { get; set; }
+        public string Header { get; set; }
+        public string Text { get; set; }
+        /// <summary>Piggybacks PluginConfiguration.Language along for the ride, same as the
+        /// generic updatePluginConfiguration() call this replaces used to (see saveWelcomeConfig
+        /// in config.js) - this is the only place in the dashboard that ever persisted it, since
+        /// the weekly Media News auto-send job (MediaNewsAutoScheduler) reads it server-side to
+        /// pick a language with no live browser request to ask. Preserved here unchanged rather
+        /// than fixed/moved, to avoid an unrelated behavior change while only asked for length
+        /// limits and date/time locale.</summary>
+        public string Language { get; set; }
+    }
+
+    public class WelcomeMessageDto
+    {
+        public bool Enabled { get; set; }
+        public string Header { get; set; }
+        public string Text { get; set; }
+        /// <summary>Set (only) when the request is rejected - e.g. Header over its length limit -
+        /// instead of anything being persisted. Same "Error field, still 200 OK" convention as
+        /// SendResultDto.Error elsewhere in this file.</summary>
+        public string Error { get; set; }
     }
 
     // ---- Welcome message: bulk-mark existing users -----------------------
@@ -411,11 +464,43 @@ namespace EmbyCast.Plugin.Api
         // an "...Api" sub-namespace of the "...Plugin" namespace that declares the Plugin class).
         private static Plugin P => Plugin.Instance;
 
+        // ---- Text length limits (added 2026-09-07 per admin request) ----------------------
+        // Header fields are short, single-line identifiers rendered as the bold title of a
+        // toast notification - a value over this length is REJECTED outright (not silently
+        // truncated), since cutting a header off mid-word would look broken in a live
+        // notification and a header is short/identifying enough that losing part of it changes
+        // its meaning. Message body fields are free-form content - truncated SILENTLY instead,
+        // since losing the tail of an over-long paste is a much smaller admin-facing surprise
+        // than an outright rejected send for what's usually a one-off broadcast the admin wants
+        // to go out now. Episode Template and Group Name are short structured/identifier
+        // fields - the template contains placeholder tokens like {SxxExx} that a silent
+        // truncation could cut mid-token, and a truncated group name could leave an admin
+        // looking at a group they no longer recognize - both rejected outright, same reasoning
+        // as Header. These are intentionally simple length checks in this API layer (not on the
+        // storage models themselves), matching this file's existing "reject via an Error field
+        // on the response, still HTTP 200" convention (see e.g. MediaNewsSendResult.Error)
+        // rather than throwing an SDK HttpError type this project has no compiler to verify
+        // against - see MediaNewsService.cs's own doc comment on avoiding unverified SDK
+        // internals for why that caution exists here.
+        private const int MaxHeaderLength = 80;
+        private const int MaxMessageTextLength = 500;
+        private const int MaxEpisodeTemplateLength = 200;
+        private const int MaxGroupNameLength = 80;
+
+        private static string TruncateText(string text, int maxLength) =>
+            string.IsNullOrEmpty(text) || text.Length <= maxLength ? text : text.Substring(0, maxLength);
+
+        private static string HeaderTooLongError =>
+            $"Header must be {MaxHeaderLength} characters or fewer.";
+
         public async Task<object> Post(SendInstant request)
         {
+            if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
+                return new SendResultDto { Error = HeaderTooLongError };
+
             var mode = ParseMode(request.RecipientMode);
             var outcome = await P.Delivery.SendAsync(
-                request.Header, request.Text, request.TimeoutMs, mode, request.UserIds, MessageOrigin.Instant,
+                request.Header, TruncateText(request.Text, MaxMessageTextLength), request.TimeoutMs, mode, request.UserIds, MessageOrigin.Instant,
                 specificGroupIds: request.GroupIds
             ).ConfigureAwait(false);
             return ToDto(outcome);
@@ -423,10 +508,13 @@ namespace EmbyCast.Plugin.Api
 
         public object Post(CreateScheduled request)
         {
+            if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
+                return new { Error = HeaderTooLongError };
+
             var record = new ScheduledMessageRecord
             {
                 Header = request.Header,
-                Text = request.Text,
+                Text = TruncateText(request.Text, MaxMessageTextLength),
                 TimeoutMs = request.TimeoutMs,
                 SendAtUtc = request.SendAtUtc,
                 RecipientMode = request.RecipientMode,
@@ -443,8 +531,11 @@ namespace EmbyCast.Plugin.Api
         // Post(UpdateGroup); config.js's .scheduled-create handler checks for this explicitly.
         public object Post(UpdateScheduled request)
         {
+            if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
+                return new { Error = HeaderTooLongError };
+
             return P.Store.UpdateScheduled(
-                request.Id, request.Header, request.Text, request.TimeoutMs, request.SendAtUtc,
+                request.Id, request.Header, TruncateText(request.Text, MaxMessageTextLength), request.TimeoutMs, request.SendAtUtc,
                 request.RecipientMode, request.UserIds, request.GroupIds);
         }
 
@@ -466,18 +557,22 @@ namespace EmbyCast.Plugin.Api
             // the rare race this pre-check alone can't close (two near-simultaneous requests both
             // passing this check before either has claimed the slot), so that race also gets the
             // same friendly response instead of an unhandled-exception error.
+            if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
+                return new { Error = HeaderTooLongError };
+
             if (P.Timer.HasActiveOrPendingTimer())
                 return new { Success = false, AlreadyExists = true };
 
             var postAction = Enum.TryParse<PostTimerAction>(request.PostAction, out var pa) ? pa : PostTimerAction.None;
             var mode = ParseMode(request.RecipientMode);
+            var textTemplate = TruncateText(request.TextTemplate, MaxMessageTextLength);
 
             try
             {
                 if (request.ScheduledStartUtc.HasValue && request.ScheduledStartUtc.Value > DateTime.UtcNow)
                 {
                     return P.Timer.ScheduleTimer(
-                        request.Header, request.TextTemplate, request.TotalMinutes,
+                        request.Header, textTemplate, request.TotalMinutes,
                         request.PresetMinutes, postAction, mode, request.UserIds,
                         request.ScheduledStartUtc.Value, request.TimeoutMs, request.GroupIds);
                 }
@@ -486,7 +581,7 @@ namespace EmbyCast.Plugin.Api
                 // clock skew between browser and server, or a stale form) - gracefully falls back
                 // to starting immediately rather than erroring.
                 return P.Timer.StartTimer(
-                    request.Header, request.TextTemplate, request.TotalMinutes,
+                    request.Header, textTemplate, request.TotalMinutes,
                     request.PresetMinutes, postAction, mode, request.UserIds, request.TimeoutMs, request.GroupIds);
             }
             catch (InvalidOperationException)
@@ -505,6 +600,11 @@ namespace EmbyCast.Plugin.Api
 
         public async Task<object> Post(SendMediaNews request)
         {
+            if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
+                return new MediaNewsSendResult { Error = HeaderTooLongError };
+            if (!string.IsNullOrEmpty(request.EpisodeTemplate) && request.EpisodeTemplate.Length > MaxEpisodeTemplateLength)
+                return new MediaNewsSendResult { Error = $"Episode template must be {MaxEpisodeTemplateLength} characters or fewer." };
+
             var libraryManager = P.ApplicationHost.Resolve<ILibraryManager>();
             if (libraryManager == null)
                 return new MediaNewsSendResult { Error = "ILibraryManager not available" };
@@ -662,12 +762,18 @@ namespace EmbyCast.Plugin.Api
                 IncludeNewSeries = config.MediaNewsIncludeNewSeries,
                 IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes,
                 HasMovieLibrarySelected = typeFlags.HasMovieLibrary,
-                HasSeriesLibrarySelected = typeFlags.HasSeriesLibrary
+                HasSeriesLibrarySelected = typeFlags.HasSeriesLibrary,
+                WebOnly = config.MediaNewsAutoWebOnly
             };
         }
 
         public object Post(SaveMediaNewsAutoConfig request)
         {
+            if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
+                return new MediaNewsAutoStatusDto { Error = HeaderTooLongError };
+            if (!string.IsNullOrEmpty(request.EpisodeTemplate) && request.EpisodeTemplate.Length > MaxEpisodeTemplateLength)
+                return new MediaNewsAutoStatusDto { Error = $"Episode template must be {MaxEpisodeTemplateLength} characters or fewer." };
+
             var config = P.Configuration;
             config.MediaNewsAutoSendEnabled = request.Enabled;
             config.MediaNewsAutoSendDay = request.Day;
@@ -683,6 +789,7 @@ namespace EmbyCast.Plugin.Api
             config.MediaNewsIncludeNewSeries = request.IncludeNewSeries;
             config.MediaNewsIncludeNewEpisodes = request.IncludeNewEpisodes;
             config.MediaNewsEpisodeTemplate = request.EpisodeTemplate;
+            config.MediaNewsAutoWebOnly = request.WebOnly;
             P.PersistConfiguration(config);
 
             var typeFlags = ResolveMediaNewsLibraryTypeFlags(config.MediaNewsLibraryIdsCsv);
@@ -701,7 +808,8 @@ namespace EmbyCast.Plugin.Api
                 IncludeNewSeries = config.MediaNewsIncludeNewSeries,
                 IncludeNewEpisodes = config.MediaNewsIncludeNewEpisodes,
                 HasMovieLibrarySelected = typeFlags.HasMovieLibrary,
-                HasSeriesLibrarySelected = typeFlags.HasSeriesLibrary
+                HasSeriesLibrarySelected = typeFlags.HasSeriesLibrary,
+                WebOnly = config.MediaNewsAutoWebOnly
             };
         }
 
@@ -800,14 +908,46 @@ namespace EmbyCast.Plugin.Api
 
         public object Get(GetGroups request) => P.Store.GetGroups();
 
-        public object Post(CreateGroup request) => P.Store.CreateGroup(request.Name, request.UserIds);
+        public object Post(CreateGroup request)
+        {
+            if (!string.IsNullOrEmpty(request.Name) && request.Name.Length > MaxGroupNameLength)
+                return new { Error = $"Group name must be {MaxGroupNameLength} characters or fewer." };
+            return P.Store.CreateGroup(request.Name, request.UserIds);
+        }
 
-        public object Post(UpdateGroup request) => P.Store.UpdateGroup(request.Id, request.Name, request.UserIds);
+        public object Post(UpdateGroup request)
+        {
+            if (!string.IsNullOrEmpty(request.Name) && request.Name.Length > MaxGroupNameLength)
+                return new { Error = $"Group name must be {MaxGroupNameLength} characters or fewer." };
+            return P.Store.UpdateGroup(request.Id, request.Name, request.UserIds);
+        }
 
         public object Delete(DeleteGroup request)
         {
             var ok = P.Store.DeleteGroup(request.Id);
             return new { Success = ok };
+        }
+
+        // ---- Welcome message: save Enabled/Header/Text ------------------------
+
+        public object Post(SaveWelcomeMessage request)
+        {
+            if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
+                return new WelcomeMessageDto { Error = HeaderTooLongError };
+
+            var config = P.Configuration;
+            config.WelcomeMessageEnabled = request.Enabled;
+            config.WelcomeMessageHeader = string.IsNullOrWhiteSpace(request.Header) ? "Welcome!" : request.Header.Trim();
+            config.WelcomeMessageText = TruncateText((request.Text ?? "").Trim(), MaxMessageTextLength);
+            if (!string.IsNullOrEmpty(request.Language)) config.Language = request.Language;
+            P.PersistConfiguration(config);
+
+            return new WelcomeMessageDto
+            {
+                Enabled = config.WelcomeMessageEnabled,
+                Header = config.WelcomeMessageHeader,
+                Text = config.WelcomeMessageText
+            };
         }
 
         // ---- Welcome message: bulk-mark existing users -----------------------

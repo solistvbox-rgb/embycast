@@ -386,7 +386,7 @@
         </div>
         <div class="bcm-field">
           <label data-i18n="labelMessage">Message</label>
-          <textarea class="instant-text" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
+          <textarea class="instant-text" maxlength="500" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
         </div>
         <div class="bcm-row">
           <div class="bcm-field">
@@ -427,7 +427,7 @@
         </div>
         <div class="bcm-field">
           <label data-i18n="labelMessage">Message</label>
-          <textarea class="scheduled-text" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
+          <textarea class="scheduled-text" maxlength="500" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
         </div>
         <div class="bcm-row">
           <div class="bcm-field">
@@ -478,7 +478,7 @@
         </div>
         <div class="bcm-field">
           <label data-i18n="labelMessageTemplate">Message (use {minutes} as a placeholder)</label>
-          <textarea class="timer-text">The server will restart in {minutes} minute(s).</textarea>
+          <textarea class="timer-text" maxlength="500">The server will restart in {minutes} minute(s).</textarea>
         </div>
 
         <div class="bcm-row">
@@ -506,7 +506,7 @@
         <div class="bcm-field">
           <label data-i18n="labelPresets">Reminder minute marks</label>
           <div class="bcm-presets timer-preset-chips"></div>
-          <input type="text" class="timer-preset-custom" placeholder="60,30,15,5,1" />
+          <input type="text" class="timer-preset-custom" maxlength="200" placeholder="60,30,15,5,1" />
           <p class="bcm-inline-note" data-i18n="presetsNote">Click a preset to toggle it, or type a custom comma-separated list above.</p>
         </div>
 
@@ -680,7 +680,7 @@
           <p class="group-form-title"></p>
           <div class="bcm-field">
             <label data-i18n="labelGroupName">Group name</label>
-            <input type="text" class="group-form-name" maxlength="60" />
+            <input type="text" class="group-form-name" maxlength="80" />
           </div>
           <div class="bcm-field">
             <label data-i18n="labelGroupMembers">Members</label>
@@ -712,7 +712,7 @@
         </div>
         <div class="bcm-field">
           <label data-i18n="labelMessage">Message</label>
-          <textarea class="welcome-text">Welcome to our media server - enjoy your stay!</textarea>
+          <textarea class="welcome-text" maxlength="500">Welcome to our media server - enjoy your stay!</textarea>
         </div>
 
         <!-- No separate Save/Turn off buttons - flipping the switch saves

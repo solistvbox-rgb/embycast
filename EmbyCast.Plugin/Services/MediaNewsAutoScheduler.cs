@@ -163,7 +163,7 @@ namespace EmbyCast.Plugin.Services
 
             var outcome = await _delivery.SendAsync(
                 config.MediaNewsHeader, text, 0, mode, specificIds, MessageOrigin.MediaNews,
-                specificGroupIds: specificGroupIds
+                webOnly: config.MediaNewsAutoWebOnly, specificGroupIds: specificGroupIds
             ).ConfigureAwait(false);
 
             _logger.Info("EmbyCast: auto media-news sent ({0} movie(s), {1} show(s), {2} episode(s)) - {3} delivered, {4} pending, {5} failed.",

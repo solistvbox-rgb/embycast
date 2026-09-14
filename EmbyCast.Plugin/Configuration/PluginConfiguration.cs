@@ -92,6 +92,14 @@ namespace EmbyCast.Plugin.Configuration
         /// <summary>UTC timestamp of the last automatic media-news send, used to avoid
         /// double-sending the same weekly slot after a server restart.</summary>
         public DateTime? MediaNewsLastAutoSentUtc { get; set; }
+        /// <summary>"Send only to web-browser sessions" for the recurring weekly auto-send -
+        /// captured from the (shared, see MediaNewsRecipientMode's doc comment for the same
+        /// pattern) "medianews-webonly" checkbox at the moment "Save Auto-send Settings" is
+        /// clicked, same as RecipientMode/LibraryIdsCsv/etc. above. A manual "Send Media News Now"
+        /// never persists this - see Post(SendMediaNews)'s own doc comment for why. Added
+        /// 2026-09-08 per admin request; defaults to false (send to all session types), matching
+        /// every auto-send job saved before this setting existed.</summary>
+        public bool MediaNewsAutoWebOnly { get; set; } = false;
 
         // ---- Offline delivery -----------------------------------------------
         public bool OfflineDeliveryEnabled { get; set; } = true;
