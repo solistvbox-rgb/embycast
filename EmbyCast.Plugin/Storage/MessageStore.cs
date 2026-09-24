@@ -27,6 +27,10 @@ namespace EmbyCast.Plugin.Storage
         private readonly ILogger _logger;
         private readonly object _lock = new object();
         private StoreData _data;
+        /// <summary>Set by DeleteStoreFile() (uninstall). From then on Save() is a no-op, so the
+        /// background loops that keep running until the server restarts can't recreate the file
+        /// the admin just asked to have removed.</summary>
+        private bool _deleted;
 
         private static readonly JsonSerializerOptions JsonOpts = new JsonSerializerOptions
         {
@@ -41,22 +45,127 @@ namespace EmbyCast.Plugin.Storage
             _data = Load();
         }
 
+        /// <summary>Deep copy via a JSON round-trip. Every public getter hands out copies made
+        /// under _lock rather than the live objects in _data: callers (notably the API layer,
+        /// whose responses Emby serializes after the call returns - outside the lock) would
+        /// otherwise read collections such as HistoryEntry.Deliveries or
+        /// TimerJobState.FiredPresets while a background send mutates them, which can throw
+        /// "Collection was modified" or produce torn data. Volumes are small (see the class
+        /// doc), so the extra serialization is negligible.</summary>
+        private static T Clone<T>(T value) where T : class =>
+            value == null ? null : JsonSerializer.Deserialize<T>(JsonSerializer.SerializeToUtf8Bytes(value, JsonOpts), JsonOpts);
+
+        private string TmpPath => _filePath + ".tmp";
+        private string BakPath => _filePath + ".bak";
+
+        /// <summary>Loads the store, falling back through the files Save() leaves behind: the
+        /// main file first, then ".tmp" (a complete write whose final swap was interrupted -
+        /// newer than ".bak"), then ".bak" (the previous good version, kept by Save()'s
+        /// File.Replace). A main file that exists but can't be parsed is renamed to
+        /// ".corrupt-&lt;timestamp&gt;" rather than left for the next Save() to overwrite, so it
+        /// can still be inspected/recovered by hand. Starting completely fresh is only the last
+        /// resort - it would also wipe WelcomedUserIds, making every user receive the welcome
+        /// message again on their next login, so it is logged as an error.</summary>
         private StoreData Load()
+        {
+            var mainExists = File.Exists(_filePath);
+            var loaded = TryLoadFile(_filePath);
+            if (loaded != null) return Normalize(loaded);
+
+            if (mainExists) PreserveCorruptFile();
+
+            foreach (var fallback in new[] { TmpPath, BakPath })
+            {
+                loaded = TryLoadFile(fallback);
+                if (loaded == null) continue;
+
+                _logger.Warn("EmbyCast: store file {0}, recovered from {1}.",
+                    mainExists ? "was unreadable" : "was missing", Path.GetFileName(fallback));
+                _data = Normalize(loaded);
+                lock (_lock) Save(); // restore the main file right away
+                return _data;
+            }
+
+            if (mainExists || File.Exists(TmpPath) || File.Exists(BakPath))
+                _logger.Error("EmbyCast: store file and its backups could not be loaded - starting with an empty store (history, groups, scheduled messages and welcomed-user tracking are reset).");
+            return new StoreData();
+        }
+
+        /// <summary>Repairs what System.Text.Json can't restore on its own: settable collection
+        /// properties are replaced by freshly constructed instances on deserialization, which
+        /// silently drops the StringComparer.OrdinalIgnoreCase the property initializers set up
+        /// (WelcomedUserIds, HistoryEntry.Deliveries) - lookups would turn case-sensitive after
+        /// the first reload. Also replaces any collection that came back null (e.g. an explicit
+        /// "null" in a hand-edited file) with an empty one, so no caller has to null-check.</summary>
+        private static StoreData Normalize(StoreData data)
+        {
+            data.History = data.History ?? new List<HistoryEntry>();
+            data.ScheduledMessages = data.ScheduledMessages ?? new List<ScheduledMessageRecord>();
+            data.OfflineQueue = data.OfflineQueue ?? new List<OfflineMessageRecord>();
+            data.Groups = data.Groups ?? new List<UserGroup>();
+            data.WelcomedUserIds = new HashSet<string>(
+                (data.WelcomedUserIds ?? Enumerable.Empty<string>()).Where(id => id != null),
+                StringComparer.OrdinalIgnoreCase);
+
+            data.History.RemoveAll(h => h == null);
+            foreach (var entry in data.History)
+            {
+                var deliveries = new Dictionary<string, DeliveryRecord>(StringComparer.OrdinalIgnoreCase);
+                if (entry.Deliveries != null)
+                {
+                    // Indexer, not Add: keys differing only by case collapse into one instead of
+                    // throwing.
+                    foreach (var kv in entry.Deliveries)
+                        if (kv.Key != null) deliveries[kv.Key] = kv.Value;
+                }
+                entry.Deliveries = deliveries;
+                entry.RequestedUserIds = entry.RequestedUserIds ?? new List<string>();
+            }
+            foreach (var s in data.ScheduledMessages)
+            {
+                s.SpecificUserIds = s.SpecificUserIds ?? new List<string>();
+                s.SpecificGroupIds = s.SpecificGroupIds ?? new List<string>();
+            }
+            foreach (var g in data.Groups)
+                g.UserIds = g.UserIds ?? new List<string>();
+            if (data.ActiveTimer != null)
+            {
+                data.ActiveTimer.PresetMinutes = data.ActiveTimer.PresetMinutes ?? new List<int>();
+                data.ActiveTimer.FiredPresets = data.ActiveTimer.FiredPresets ?? new List<int>();
+                data.ActiveTimer.SpecificUserIds = data.ActiveTimer.SpecificUserIds ?? new List<string>();
+                data.ActiveTimer.SpecificGroupIds = data.ActiveTimer.SpecificGroupIds ?? new List<string>();
+            }
+            return data;
+        }
+
+        private StoreData TryLoadFile(string path)
         {
             try
             {
-                if (File.Exists(_filePath))
-                {
-                    var json = File.ReadAllText(_filePath);
-                    var loaded = JsonSerializer.Deserialize<StoreData>(json, JsonOpts);
-                    if (loaded != null) return loaded;
-                }
+                if (!File.Exists(path)) return null;
+                var json = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(json)) return null;
+                return JsonSerializer.Deserialize<StoreData>(json, JsonOpts);
             }
             catch (Exception ex)
             {
-                _logger.Error("EmbyCast: failed to load store, starting fresh: {0}", ex.Message);
+                _logger.Warn("EmbyCast: failed to read store file {0}: {1}", Path.GetFileName(path), ex.Message);
+                return null;
             }
-            return new StoreData();
+        }
+
+        private void PreserveCorruptFile()
+        {
+            try
+            {
+                var target = _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+                File.Move(_filePath, target);
+                _logger.Error("EmbyCast: unreadable store file preserved as {0}.", Path.GetFileName(target));
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("EmbyCast: could not preserve unreadable store file.", ex);
+            }
         }
 
         /// <summary>Deletes the store file from disk - backs Plugin.OnUninstalling() (see
@@ -72,33 +181,61 @@ namespace EmbyCast.Plugin.Storage
         {
             lock (_lock)
             {
+                _deleted = true;
                 try
                 {
-                    if (File.Exists(_filePath)) File.Delete(_filePath);
-                    var tmp = _filePath + ".tmp";
-                    if (File.Exists(tmp)) File.Delete(tmp);
+                    foreach (var path in new[] { _filePath, TmpPath, BakPath })
+                    {
+                        if (File.Exists(path)) File.Delete(path);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("EmbyCast: failed to delete store file during uninstall: {0}", ex.Message);
+                    _logger.ErrorException("EmbyCast: failed to delete store file during uninstall.", ex);
                 }
             }
         }
 
+        /// <summary>Must be called while holding _lock. Writes to ".tmp" (flushed to disk), then
+        /// swaps it in with File.Replace, which keeps the previous version as ".bak" - there is
+        /// never a moment where no complete store file exists, unlike the old delete-then-move,
+        /// where a crash between the two steps left no main file at all. Load() knows how to
+        /// recover from either leftover.</summary>
         private void Save()
         {
+            if (_deleted) return;
             try
             {
-                var json = JsonSerializer.Serialize(_data, JsonOpts);
-                var tmp = _filePath + ".tmp";
-                File.WriteAllText(tmp, json);
-                // Best-effort atomic replace so a crash mid-write can't corrupt the store.
-                if (File.Exists(_filePath)) File.Delete(_filePath);
-                File.Move(tmp, _filePath);
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(_data, JsonOpts);
+                using (var fs = new FileStream(TmpPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    fs.Write(bytes, 0, bytes.Length);
+                    fs.Flush(true);
+                }
+
+                if (!File.Exists(_filePath))
+                {
+                    File.Move(TmpPath, _filePath);
+                    return;
+                }
+
+                try
+                {
+                    File.Replace(TmpPath, _filePath, BakPath);
+                }
+                catch (Exception ex) when (ex is IOException || ex is PlatformNotSupportedException || ex is UnauthorizedAccessException)
+                {
+                    // Some filesystems (certain network shares / container bind mounts) don't
+                    // support File.Replace. Fall back to copies: less atomic, but a complete
+                    // ".bak" and ".tmp" both exist at every step, so Load() can still recover.
+                    File.Copy(_filePath, BakPath, true);
+                    File.Copy(TmpPath, _filePath, true);
+                    File.Delete(TmpPath);
+                }
             }
             catch (Exception ex)
             {
-                _logger.Error("EmbyCast: failed to save store: {0}", ex.Message);
+                _logger.ErrorException("EmbyCast: failed to save store.", ex);
             }
         }
 
@@ -130,9 +267,41 @@ namespace EmbyCast.Plugin.Storage
             }
         }
 
+        /// <summary>Records a whole send's outcome in one write: every delivery record on the
+        /// history entry plus every offline-queue record, then a single Save(). DeliveryService
+        /// used to call UpdateHistoryDelivery/QueueOffline once per recipient, rewriting the entire
+        /// store file each time - N full rewrites for an "All users" broadcast. Delivery records
+        /// are keyed by DeliveryRecord.UserId; records without one are skipped. The offline
+        /// records are queued even if the history entry has meanwhile disappeared (capped or
+        /// cleared), same as QueueOffline always did.</summary>
+        public void RecordSendResults(string historyEntryId, IEnumerable<DeliveryRecord> deliveries, IEnumerable<OfflineMessageRecord> offlineRecords)
+        {
+            lock (_lock)
+            {
+                var changed = false;
+                var entry = _data.History.FirstOrDefault(h => h.Id == historyEntryId);
+                if (entry != null)
+                {
+                    foreach (var record in deliveries ?? Enumerable.Empty<DeliveryRecord>())
+                    {
+                        if (record == null || string.IsNullOrEmpty(record.UserId)) continue;
+                        entry.Deliveries[record.UserId] = record;
+                        changed = true;
+                    }
+                }
+                foreach (var offline in offlineRecords ?? Enumerable.Empty<OfflineMessageRecord>())
+                {
+                    if (offline == null) continue;
+                    _data.OfflineQueue.Add(offline);
+                    changed = true;
+                }
+                if (changed) Save();
+            }
+        }
+
         public List<HistoryEntry> GetHistory()
         {
-            lock (_lock) return _data.History.ToList();
+            lock (_lock) return _data.History.Select(Clone).ToList();
         }
 
         /// <summary>Removes any still-queued offline deliveries tied to the given history entry
@@ -190,7 +359,7 @@ namespace EmbyCast.Plugin.Storage
             {
                 _data.ScheduledMessages.Add(record);
                 Save();
-                return record;
+                return Clone(record);
             }
         }
 
@@ -201,6 +370,7 @@ namespace EmbyCast.Plugin.Storage
                 return _data.ScheduledMessages
                     .Where(s => includeSentOrCancelled || (!s.Sent && !s.Cancelled))
                     .OrderBy(s => s.SendAtUtc)
+                    .Select(Clone)
                     .ToList();
             }
         }
@@ -211,23 +381,39 @@ namespace EmbyCast.Plugin.Storage
             {
                 return _data.ScheduledMessages
                     .Where(s => !s.Sent && !s.Cancelled && s.SendAtUtc <= nowUtc)
+                    .Select(Clone)
                     .ToList();
             }
         }
 
-        /// <summary>Removes the scheduled-message record outright once it has fired, rather than
-        /// just flagging Sent=true and leaving it in the list forever. The full audit trail
-        /// (header/text/recipients/outcome) already lives independently in the HistoryEntry
-        /// DeliveryService.SendAsync created for this send, so nothing is lost - and nothing in
-        /// the UI ever reads back already-sent scheduled records (GetScheduled's
-        /// includeSentOrCancelled=true path is unused).</summary>
-        public void MarkScheduledSent(string id)
+        /// <summary>Atomically removes a still-pending scheduled message and returns it (null if
+        /// it no longer exists - already taken, cancelled or edited away). The background sender
+        /// takes a message BEFORE sending it, so a crash or restart mid-send can never make it go
+        /// out twice (at-most-once); if the send fails before anything reached anyone, the caller
+        /// puts it back with ReturnScheduled(). Records are removed outright rather than flagged
+        /// Sent=true: the full audit trail lives in the HistoryEntry the send creates, and
+        /// nothing in the UI reads back already-sent scheduled records.</summary>
+        public ScheduledMessageRecord TryTakeScheduled(string id)
         {
             lock (_lock)
             {
-                var record = _data.ScheduledMessages.FirstOrDefault(s => s.Id == id);
-                if (record == null) return;
+                var record = _data.ScheduledMessages.FirstOrDefault(s => s.Id == id && !s.Sent && !s.Cancelled);
+                if (record == null) return null;
                 _data.ScheduledMessages.Remove(record);
+                Save();
+                return record;
+            }
+        }
+
+        /// <summary>Puts a message taken by TryTakeScheduled() back, unchanged, for another
+        /// attempt on the next poll. A no-op if a record with the same id exists again.</summary>
+        public void ReturnScheduled(ScheduledMessageRecord record)
+        {
+            if (record == null) return;
+            lock (_lock)
+            {
+                if (_data.ScheduledMessages.Any(s => s.Id == record.Id)) return;
+                _data.ScheduledMessages.Add(record);
                 Save();
             }
         }
@@ -235,7 +421,7 @@ namespace EmbyCast.Plugin.Storage
         /// <summary>Updates a still-pending scheduled message in place (same Id, so it keeps its
         /// position/identity rather than becoming a new entry). Returns null if no such record
         /// exists any more - covers both "wrong id" and "it already fired or was cancelled" in one
-        /// case, since MarkScheduledSent/CancelScheduled both remove the record outright rather
+        /// case, since TryTakeScheduled/CancelScheduled both remove the record outright rather
         /// than flagging it (see their doc comments) - same "not found" contract as
         /// UpdateGroup.</summary>
         public ScheduledMessageRecord UpdateScheduled(
@@ -254,12 +440,12 @@ namespace EmbyCast.Plugin.Storage
                 record.SpecificUserIds = userIds ?? new List<string>();
                 record.SpecificGroupIds = groupIds ?? new List<string>();
                 Save();
-                return record;
+                return Clone(record);
             }
         }
 
         /// <summary>Removes the scheduled-message record outright on cancellation, for the same
-        /// reason as MarkScheduledSent above.</summary>
+        /// reason as TryTakeScheduled above.</summary>
         public bool CancelScheduled(string id)
         {
             lock (_lock)
@@ -305,6 +491,35 @@ namespace EmbyCast.Plugin.Storage
                     Save();
                 }
                 return pending;
+            }
+        }
+
+        /// <summary>Puts messages taken by TakePendingForUser() back into the queue because they
+        /// could not actually be delivered (e.g. the session ended before the send, or the
+        /// session manager was unavailable) - otherwise they would be lost while their history
+        /// entry kept showing "Pending" forever. Records keep their original Id and QueuedAtUtc,
+        /// so offline expiry still counts from the first queueing. A record whose history entry
+        /// was dismissed in the meantime is NOT re-queued, since dismissing is how an admin
+        /// cancels pending deliveries (see DismissHistory). Returns the number re-queued.</summary>
+        public int RequeueOffline(IEnumerable<OfflineMessageRecord> records)
+        {
+            lock (_lock)
+            {
+                var count = 0;
+                foreach (var record in records ?? Enumerable.Empty<OfflineMessageRecord>())
+                {
+                    if (record == null) continue;
+                    if (!string.IsNullOrEmpty(record.HistoryEntryId))
+                    {
+                        var entry = _data.History.FirstOrDefault(h => h.Id == record.HistoryEntryId);
+                        if (entry != null && !entry.Active) continue;
+                    }
+                    if (_data.OfflineQueue.Any(o => o.Id == record.Id)) continue;
+                    _data.OfflineQueue.Add(record);
+                    count++;
+                }
+                if (count > 0) Save();
+                return count;
             }
         }
 
@@ -464,7 +679,7 @@ namespace EmbyCast.Plugin.Storage
 
         public TimerJobState GetActiveTimer()
         {
-            lock (_lock) return _data.ActiveTimer;
+            lock (_lock) return Clone(_data.ActiveTimer);
         }
 
         public void UpdateActiveTimer(Action<TimerJobState> mutate)
@@ -495,11 +710,66 @@ namespace EmbyCast.Plugin.Storage
             lock (_lock) return _data.WelcomedUserIds.Contains(userId);
         }
 
-        public void MarkWelcomed(string userId)
+        /// <summary>Atomically claims the welcome message for this user: returns true (and
+        /// persists the mark) only for the first caller - a separate HasWelcomed() check followed
+        /// by a later mark let two sessions starting at the same time (e.g. web + app) both pass
+        /// the check and both send the welcome message. The caller must undo the claim with
+        /// UnmarkWelcomed() if the send then fails, so the user is retried on the next login
+        /// instead of being counted as welcomed without ever having received it.</summary>
+        public bool TryMarkWelcomed(string userId)
         {
             lock (_lock)
             {
-                if (_data.WelcomedUserIds.Add(userId)) Save();
+                if (!_data.WelcomedUserIds.Add(userId)) return false;
+                Save();
+                return true;
+            }
+        }
+
+        /// <summary>Reverts a TryMarkWelcomed() claim whose send failed.</summary>
+        public void UnmarkWelcomed(string userId)
+        {
+            lock (_lock)
+            {
+                if (_data.WelcomedUserIds.Remove(userId)) Save();
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Media news auto-send slot
+        // ---------------------------------------------------------------
+
+        public DateTime? GetMediaNewsLastAutoSentUtc()
+        {
+            lock (_lock) return _data.MediaNewsLastAutoSentUtc;
+        }
+
+        /// <summary>Atomically claims a weekly auto-send slot: returns true (and records nowUtc
+        /// as the last send) only if the last recorded send is older than slotUtc. Check and
+        /// write happen under one lock acquisition, so the slot can be handed out at most once.</summary>
+        public bool TryClaimMediaNewsAutoSlot(DateTime slotUtc, DateTime nowUtc)
+        {
+            lock (_lock)
+            {
+                var last = _data.MediaNewsLastAutoSentUtc;
+                if (last.HasValue && last.Value >= slotUtc) return false;
+                _data.MediaNewsLastAutoSentUtc = nowUtc;
+                Save();
+                return true;
+            }
+        }
+
+        /// <summary>One-time migration of the legacy PluginConfiguration.MediaNewsLastAutoSentUtc
+        /// into the store - only if the store doesn't have a value yet, so it can never move the
+        /// timestamp backwards once the store owns it.</summary>
+        public void MigrateMediaNewsLastAutoSentUtc(DateTime? legacyValue)
+        {
+            if (!legacyValue.HasValue) return;
+            lock (_lock)
+            {
+                if (_data.MediaNewsLastAutoSentUtc.HasValue) return;
+                _data.MediaNewsLastAutoSentUtc = legacyValue;
+                Save();
             }
         }
 
@@ -591,7 +861,7 @@ namespace EmbyCast.Plugin.Storage
 
         public List<UserGroup> GetGroups()
         {
-            lock (_lock) return _data.Groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            lock (_lock) return _data.Groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).Select(Clone).ToList();
         }
 
         public UserGroup CreateGroup(string name, List<string> userIds)
@@ -606,7 +876,7 @@ namespace EmbyCast.Plugin.Storage
                 };
                 _data.Groups.Add(group);
                 Save();
-                return group;
+                return Clone(group);
             }
         }
 
@@ -621,7 +891,7 @@ namespace EmbyCast.Plugin.Storage
                 group.UserIds = (userIds ?? new List<string>()).Where(uid => !string.IsNullOrWhiteSpace(uid))
                     .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 Save();
-                return group;
+                return Clone(group);
             }
         }
 

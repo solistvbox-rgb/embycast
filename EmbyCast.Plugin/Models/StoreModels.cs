@@ -166,5 +166,13 @@ namespace EmbyCast.Plugin.Models
         /// <summary>How many user ids were cleared on that last run - see
         /// LastUnmarkExistingWelcomedUtc. Always set together with it (both null, or both set).</summary>
         public int? LastUnmarkExistingWelcomedCount { get; set; }
+        /// <summary>UTC timestamp of the last automatic media-news send (see
+        /// MediaNewsAutoScheduler), used to avoid double-sending the same weekly slot. Lives here
+        /// rather than in PluginConfiguration because it is runtime state written by a
+        /// background loop: the dashboard's full-config saves (Emby's generic
+        /// updatePluginConfiguration) used to overwrite it with the stale value loaded when the
+        /// page was opened, re-arming an already-sent slot. Migrated once from the legacy
+        /// PluginConfiguration.MediaNewsLastAutoSentUtc - see Plugin's constructor.</summary>
+        public DateTime? MediaNewsLastAutoSentUtc { get; set; }
     }
 }

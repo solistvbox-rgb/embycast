@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EmbyCast.Plugin.Configuration;
 using EmbyCast.Plugin.Models;
+using EmbyCast.Plugin.Storage;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
@@ -26,7 +27,7 @@ namespace EmbyCast.Plugin.Services
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
 
         private readonly Func<PluginConfiguration> _getConfig;
-        private readonly Action<PluginConfiguration> _saveConfig;
+        private readonly MessageStore _store;
         private readonly MediaNewsService _mediaNews;
         private readonly DeliveryService _delivery;
         private readonly IServerApplicationHost _appHost;
@@ -34,14 +35,14 @@ namespace EmbyCast.Plugin.Services
 
         public MediaNewsAutoScheduler(
             Func<PluginConfiguration> getConfig,
-            Action<PluginConfiguration> saveConfig,
+            MessageStore store,
             MediaNewsService mediaNews,
             DeliveryService delivery,
             IServerApplicationHost appHost,
             ILogManager logManager)
         {
             _getConfig = getConfig;
-            _saveConfig = saveConfig;
+            _store = store;
             _mediaNews = mediaNews;
             _delivery = delivery;
             _appHost = appHost;
@@ -59,7 +60,7 @@ namespace EmbyCast.Plugin.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("EmbyCast: media-news auto-scheduler iteration failed: {0}", ex.Message);
+                    _logger.ErrorException("EmbyCast: media-news auto-scheduler iteration failed.", ex);
                 }
 
                 try { await Task.Delay(PollInterval, token).ConfigureAwait(false); }
@@ -103,7 +104,10 @@ namespace EmbyCast.Plugin.Services
 
             var now = DateTime.UtcNow;
             var lastOccurrence = GetLastOccurrence(now, config.MediaNewsAutoSendDay, config.MediaNewsAutoSendHour, config.MediaNewsAutoSendMinute);
-            var alreadySent = config.MediaNewsLastAutoSentUtc.HasValue && config.MediaNewsLastAutoSentUtc.Value >= lastOccurrence;
+            // Read from the store, not PluginConfiguration - see StoreData.MediaNewsLastAutoSentUtc
+            // for why this runtime timestamp no longer lives in the config.
+            var lastSent = _store.GetMediaNewsLastAutoSentUtc();
+            var alreadySent = lastSent.HasValue && lastSent.Value >= lastOccurrence;
 
             if (alreadySent) return;
             // Only fire within a short window after the due time so a server that was offline
@@ -121,9 +125,9 @@ namespace EmbyCast.Plugin.Services
             // return path past this point - otherwise, since this whole method is polled every
             // 60 seconds and stays inside the 6-hour "due" window, an admin who enabled
             // auto-send without checking any library would get this warning logged up to ~360
-            // times before the window closes, instead of once.
-            config.MediaNewsLastAutoSentUtc = now;
-            _saveConfig(config);
+            // times before the window closes, instead of once. Claimed atomically in the store,
+            // so the slot can only ever be handed out once.
+            if (!_store.TryClaimMediaNewsAutoSlot(lastOccurrence, now)) return;
 
             if (libraryIds.Length == 0)
             {
@@ -149,9 +153,7 @@ namespace EmbyCast.Plugin.Services
                 return;
             }
 
-            var text = digest.IsEmpty
-                ? (config.Language == "de" ? "Keine Neuheiten in dieser Woche." : "No new movies or TV shows this week.")
-                : _mediaNews.ToMessageText(digest, config.Language);
+            var noNewsText = config.Language == "de" ? "Keine Neuheiten in dieser Woche." : "No new movies or TV shows this week.";
 
             var mode = Enum.TryParse<RecipientMode>(config.MediaNewsRecipientMode, out var m) ? m : RecipientMode.All;
             var specificIds = string.IsNullOrWhiteSpace(config.MediaNewsSpecificUserIdsCsv)
@@ -161,13 +163,21 @@ namespace EmbyCast.Plugin.Services
                 ? Array.Empty<string>()
                 : config.MediaNewsSpecificGroupIdsCsv.Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToArray();
 
-            var outcome = await _delivery.SendAsync(
-                config.MediaNewsHeader, text, 0, mode, specificIds, MessageOrigin.MediaNews,
-                webOnly: config.MediaNewsAutoWebOnly, specificGroupIds: specificGroupIds
-            ).ConfigureAwait(false);
+            // Personalized per recipient - each user only hears about titles they can access (see
+            // MediaNewsResult.FilterForUser). A user with nothing accessible gets the "no news"
+            // text only if the admin opted out of skipping empty digests, same as the whole-digest
+            // check above.
+            var outcome = await _delivery.SendPersonalizedAsync(
+                config.MediaNewsHeader, mode, specificIds, specificGroupIds, config.MediaNewsAutoWebOnly, MessageOrigin.MediaNews,
+                user =>
+                {
+                    var own = digest.FilterForUser(user);
+                    if (!own.IsEmpty) return _mediaNews.ToMessageText(own, config.Language);
+                    return config.MediaNewsSkipWhenEmpty ? null : noNewsText;
+                }).ConfigureAwait(false);
 
-            _logger.Info("EmbyCast: auto media-news sent ({0} movie(s), {1} show(s), {2} episode(s)) - {3} delivered, {4} pending, {5} failed.",
-                digest.Movies.Count, digest.Series.Count, digest.Episodes.Count, outcome.Delivered, outcome.Pending, outcome.Failed);
+            _logger.Info("EmbyCast: auto media-news sent ({0} movie(s), {1} show(s), {2} episode(s)) - {3} delivered, {4} pending, {5} failed, {6} user(s) with nothing accessible skipped.",
+                digest.Movies.Count, digest.Series.Count, digest.Episodes.Count, outcome.Delivered, outcome.Pending, outcome.Failed, outcome.NoContent);
         }
     }
 }

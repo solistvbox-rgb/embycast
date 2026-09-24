@@ -60,7 +60,7 @@ namespace EmbyCast.Plugin.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("EmbyCast: scheduled-message loop iteration failed: {0}", ex.Message);
+                    _logger.ErrorException("EmbyCast: scheduled-message loop iteration failed.", ex);
                 }
 
                 // Piggybacks on this same 20s poll rather than running its own separate loop -
@@ -74,7 +74,7 @@ namespace EmbyCast.Plugin.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("EmbyCast: pending-timer check failed: {0}", ex.Message);
+                    _logger.ErrorException("EmbyCast: pending-timer check failed.", ex);
                 }
 
                 try
@@ -87,7 +87,7 @@ namespace EmbyCast.Plugin.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("EmbyCast: cleanup loop iteration failed: {0}", ex.Message);
+                    _logger.ErrorException("EmbyCast: cleanup loop iteration failed.", ex);
                 }
 
                 try { await Task.Delay(PollInterval, token).ConfigureAwait(false); }
@@ -139,15 +139,39 @@ namespace EmbyCast.Plugin.Services
             }
         }
 
+        /// <summary>A scheduled message more overdue than this (typically: the server was not
+        /// running at its send time) is not sent any more - an announcement like "server
+        /// maintenance tonight at 22:00" arriving the next morning does more harm than good, and
+        /// after a long downtime every overdue message would otherwise fire at once on startup.
+        /// Same window MediaNewsAutoScheduler uses for its weekly slot.</summary>
+        private static readonly TimeSpan MaxOverdue = TimeSpan.FromHours(6);
+
+        /// <summary>Sends every due message at most once: each is taken out of the store
+        /// (TryTakeScheduled) BEFORE sending, so a crash/restart mid-send can't send it again.
+        /// If the send fails before anything reached anyone (no history entry was created, e.g.
+        /// the session manager wasn't available yet during startup) it is put back and retried
+        /// on the next poll - until it becomes too overdue, see MaxOverdue.</summary>
         private async Task ProcessDueAsync()
         {
-            var due = _store.GetDueScheduled(DateTime.UtcNow);
-            foreach (var scheduled in due)
+            var now = DateTime.UtcNow;
+            var due = _store.GetDueScheduled(now);
+            foreach (var candidate in due)
             {
+                // Re-read under the store lock: it may have been cancelled or edited since.
+                var scheduled = _store.TryTakeScheduled(candidate.Id);
+                if (scheduled == null) continue;
+
+                if (now - scheduled.SendAtUtc > MaxOverdue)
+                {
+                    RecordMissed(scheduled);
+                    continue;
+                }
+
+                SendOutcome outcome = null;
                 try
                 {
                     var mode = Enum.TryParse<RecipientMode>(scheduled.RecipientMode, out var m) ? m : RecipientMode.All;
-                    var outcome = await _delivery.SendAsync(
+                    outcome = await _delivery.SendAsync(
                         scheduled.Header,
                         scheduled.Text,
                         scheduled.TimeoutMs,
@@ -157,16 +181,51 @@ namespace EmbyCast.Plugin.Services
                         scheduled.SendAtUtc,
                         specificGroupIds: scheduled.SpecificGroupIds
                     ).ConfigureAwait(false);
-
-                    _store.MarkScheduledSent(scheduled.Id);
-                    _logger.Info("EmbyCast: sent scheduled message '{0}' ({1} delivered, {2} pending, {3} failed)",
-                        scheduled.Header, outcome.Delivered, outcome.Pending, outcome.Failed);
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("EmbyCast: failed to send scheduled message {0}: {1}", scheduled.Id, ex.Message);
+                    _logger.ErrorException("EmbyCast: failed to send scheduled message {0}.", ex, scheduled.Id);
+                }
+
+                if (outcome == null || (outcome.HistoryEntryId == null && outcome.Error != null))
+                {
+                    // Nothing was sent to anyone - safe to retry without risking duplicates.
+                    _store.ReturnScheduled(scheduled);
+                    _logger.Warn("EmbyCast: scheduled message '{0}' could not be sent ({1}); will retry.",
+                        scheduled.Header, outcome?.Error ?? "exception, see above");
+                    continue;
+                }
+
+                if (outcome.Error != null)
+                {
+                    _logger.Warn("EmbyCast: scheduled message '{0}' was only partly sent ({1} delivered, {2} pending, {3} failed): {4}",
+                        scheduled.Header, outcome.Delivered, outcome.Pending, outcome.Failed, outcome.Error);
+                }
+                else
+                {
+                    _logger.Info("EmbyCast: sent scheduled message '{0}' ({1} delivered, {2} pending, {3} failed)",
+                        scheduled.Header, outcome.Delivered, outcome.Pending, outcome.Failed);
                 }
             }
+        }
+
+        /// <summary>Leaves a visible trace in "Status &amp; History" for a message skipped as too
+        /// overdue, instead of it silently vanishing from the scheduled list.</summary>
+        private void RecordMissed(ScheduledMessageRecord scheduled)
+        {
+            _logger.Warn("EmbyCast: scheduled message '{0}' (due {1:u}) was not sent - more than {2} hours overdue, probably because the server was not running at that time.",
+                scheduled.Header, scheduled.SendAtUtc, MaxOverdue.TotalHours);
+
+            _store.AddHistory(new HistoryEntry
+            {
+                MessageType = MessageOrigin.Scheduled.ToString(),
+                Header = TextFormatting.NormalizeMessageText(string.IsNullOrWhiteSpace(scheduled.Header) ? "Announcement" : scheduled.Header),
+                Text = $"⚠ NOT SENT - more than {MaxOverdue.TotalHours:0} hours overdue (the server was probably not running at the scheduled time).\n\n"
+                       + TextFormatting.NormalizeMessageText(scheduled.Text),
+                RecipientMode = scheduled.RecipientMode,
+                ScheduledForUtc = scheduled.SendAtUtc,
+                RequestedUserIds = scheduled.SpecificUserIds ?? new List<string>()
+            }, _getConfig().HistoryMaxEntries);
         }
     }
 }

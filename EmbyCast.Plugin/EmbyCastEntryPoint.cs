@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbyCast.Plugin.Models;
@@ -35,8 +36,14 @@ namespace EmbyCast.Plugin
         private readonly ILogManager _logManager;
         private readonly ILogger _logger;
 
-        private CancellationTokenSource _scheduledCts;
-        private CancellationTokenSource _mediaNewsCts;
+        /// <summary>One token for everything this entry point starts - both polling loops and
+        /// the delayed per-login work in OnSessionStarted - cancelled in Dispose().</summary>
+        private readonly CancellationTokenSource _lifetimeCts = new CancellationTokenSource();
+        private readonly List<Task> _backgroundTasks = new List<Task>();
+
+        /// <summary>How long Dispose() waits for the polling loops to notice cancellation and
+        /// exit (each only has to finish its current iteration) before giving up on them.</summary>
+        private static readonly TimeSpan ShutdownWait = TimeSpan.FromSeconds(5);
 
         public EmbyCastEntryPoint(IServerApplicationHost appHost, ISessionManager sessionManager, ILogManager logManager)
         {
@@ -54,6 +61,10 @@ namespace EmbyCast.Plugin
                 _logger.Error("EmbyCast: Plugin.Instance was null during entry point Run(); background services not started.");
                 return;
             }
+
+            // First, before anything below can read the migrated values (the media-news
+            // scheduler in particular) - see Plugin.RunStartupMigrations.
+            plugin.RunStartupMigrations();
 
             if (_sessionManager != null)
             {
@@ -80,20 +91,19 @@ namespace EmbyCast.Plugin
             // (see ScheduledMessageBackgroundService.RunLoopAsync) - passed in here rather than
             // given its own polling loop, since a 20s-granularity check is more than fine for
             // "has this scheduled timer's start time arrived yet".
-            _scheduledCts = new CancellationTokenSource();
+            var token = _lifetimeCts.Token;
             var scheduledService = new ScheduledMessageBackgroundService(
                 plugin.Delivery, plugin.Store, plugin.Timer, _logManager, () => plugin.Configuration);
-            _ = Task.Run(() => scheduledService.RunLoopAsync(_scheduledCts.Token), _scheduledCts.Token);
+            _backgroundTasks.Add(Task.Run(() => scheduledService.RunLoopAsync(token), token));
 
-            _mediaNewsCts = new CancellationTokenSource();
             var mediaNewsScheduler = new MediaNewsAutoScheduler(
                 () => plugin.Configuration,
-                cfg => plugin.PersistConfiguration(cfg),
+                plugin.Store,
                 plugin.MediaNews,
                 plugin.Delivery,
                 _appHost,
                 _logManager);
-            _ = Task.Run(() => mediaNewsScheduler.RunLoopAsync(_mediaNewsCts.Token), _mediaNewsCts.Token);
+            _backgroundTasks.Add(Task.Run(() => mediaNewsScheduler.RunLoopAsync(token), token));
 
             _logger.Info("EmbyCast: entry point started.");
         }
@@ -112,30 +122,55 @@ namespace EmbyCast.Plugin
 
             try
             {
-                // Give the client UI a moment to finish initializing before pushing a popup.
-                await Task.Delay(8000).ConfigureAwait(false);
+                // Give the client UI a moment to finish initializing before pushing a popup -
+                // cancellable, so a server shutdown doesn't leave this pending (and then acting
+                // on a half-disposed plugin).
+                await Task.Delay(8000, _lifetimeCts.Token).ConfigureAwait(false);
 
                 var isWebSession = DeliveryService.IsWebSession(session);
                 await plugin.Delivery.DeliverOfflineQueueForUserAsync(userId, session.UserName, session.Id, isWebSession).ConfigureAwait(false);
 
                 var config = plugin.Configuration;
-                if (config.WelcomeMessageEnabled && !plugin.Store.HasWelcomed(userId))
+                // Claimed atomically BEFORE sending (see MessageStore.TryMarkWelcomed), so two
+                // sessions of the same user starting at once can't both send it - and released
+                // again if the send didn't reach the user (neither delivered live nor queued for
+                // offline delivery), so they get it on a later login instead of never.
+                if (config.WelcomeMessageEnabled && plugin.Store.TryMarkWelcomed(userId))
                 {
-                    await plugin.Delivery.SendAsync(
-                        config.WelcomeMessageHeader,
-                        config.WelcomeMessageText,
-                        config.WelcomeMessageTimeoutMs,
-                        RecipientMode.Specific,
-                        new[] { userId },
-                        MessageOrigin.Welcome
-                    ).ConfigureAwait(false);
+                    var welcomed = false;
+                    try
+                    {
+                        var outcome = await plugin.Delivery.SendAsync(
+                            config.WelcomeMessageHeader,
+                            config.WelcomeMessageText,
+                            config.WelcomeMessageTimeoutMs,
+                            RecipientMode.Specific,
+                            new[] { userId },
+                            MessageOrigin.Welcome
+                        ).ConfigureAwait(false);
 
-                    plugin.Store.MarkWelcomed(userId);
+                        welcomed = outcome.Error == null && outcome.Delivered + outcome.Pending > 0;
+                        if (!welcomed)
+                            _logger.Warn("EmbyCast: welcome message for {0} was not delivered ({1}); will retry on the next login.",
+                                session.UserName, outcome.Error ?? "no session reached");
+                    }
+                    finally
+                    {
+                        if (!welcomed) plugin.Store.UnmarkWelcomed(userId);
+                    }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // Server shutting down (or CTS already disposed) - nothing left to do.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Same - the entry point was disposed while this login was still being handled.
             }
             catch (Exception ex)
             {
-                _logger.Warn("EmbyCast: OnSessionStarted handling failed for {0}: {1}", session.UserName, ex.Message);
+                _logger.ErrorException("EmbyCast: OnSessionStarted handling failed for {0}.", ex, session.UserName);
             }
         }
 
@@ -146,10 +181,23 @@ namespace EmbyCast.Plugin
                 _sessionManager.SessionStarted -= OnSessionStarted;
             }
 
-            try { _scheduledCts?.Cancel(); } catch { /* ignore */ }
-            try { _mediaNewsCts?.Cancel(); } catch { /* ignore */ }
+            try { _lifetimeCts.Cancel(); } catch { /* ignore */ }
 
             Plugin.Instance?.Timer.StopForShutdown();
+
+            // Give the loops a moment to finish their current iteration (e.g. a store write in
+            // progress) instead of abandoning them mid-way, but never block shutdown for long.
+            try
+            {
+                if (_backgroundTasks.Count > 0 && !Task.WaitAll(_backgroundTasks.ToArray(), ShutdownWait))
+                    _logger.Warn("EmbyCast: background loops did not stop within {0}s; continuing shutdown.", ShutdownWait.TotalSeconds);
+            }
+            catch (AggregateException)
+            {
+                // Cancelled/faulted loops - expected during shutdown, already logged by the loops.
+            }
+
+            _lifetimeCts.Dispose();
         }
     }
 }

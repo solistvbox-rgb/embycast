@@ -18,6 +18,9 @@ namespace EmbyCast.Plugin
         /// GitHub Enterprise instance that doesn't support it).</summary>
         public string ExpectedSha256 { get; set; }
         public bool ChecksumAvailable => !string.IsNullOrEmpty(ExpectedSha256);
+        /// <summary>Download URL of the "EmbyCast.Plugin.dll.sig" release asset, if the release
+        /// has one - see ReleaseSignature.</summary>
+        public string SignatureUrl { get; set; }
         public string ReleaseNotes { get; set; }
         public string Error { get; set; }
     }
@@ -60,6 +63,11 @@ namespace EmbyCast.Plugin
         // InvalidateCache() first (see Plugin.InstallUpdateAsync/EmbyCastApi's manual-check
         // route), so it always hits the API fresh regardless of this value.
         private static readonly TimeSpan CacheTtl = TimeSpan.FromDays(7);
+        /// <summary>A FAILED check (network down, GitHub rate limit, ...) is only cached this long
+        /// - otherwise one transient failure would pin the dashboard's update badge to the error
+        /// for a whole week. Still long enough that repeated page loads during an outage don't
+        /// hammer the API.</summary>
+        private static readonly TimeSpan ErrorCacheTtl = TimeSpan.FromMinutes(15);
 
         private static UpdateCheckResult _cached;
         private static DateTime _cacheTime = DateTime.MinValue;
@@ -86,8 +94,11 @@ namespace EmbyCast.Plugin
         {
             lock (_lock)
             {
-                if (_cached != null && (DateTime.UtcNow - _cacheTime) < CacheTtl)
-                    return _cached;
+                if (_cached != null)
+                {
+                    var ttl = string.IsNullOrEmpty(_cached.Error) ? CacheTtl : ErrorCacheTtl;
+                    if ((DateTime.UtcNow - _cacheTime) < ttl) return _cached;
+                }
             }
 
             var currentVersion = GetCurrentVersion();
@@ -139,6 +150,12 @@ namespace EmbyCast.Plugin
                             if (!asset.TryGetProperty("name", out nameEl)) continue;
                             var assetName = nameEl.GetString();
                             if (!asset.TryGetProperty("browser_download_url", out urlEl)) continue;
+
+                            if (string.Equals(assetName, ReleaseSignature.SignatureAssetName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.SignatureUrl = urlEl.GetString();
+                                continue;
+                            }
 
                             if (string.Equals(assetName, DllAssetName, StringComparison.OrdinalIgnoreCase))
                             {

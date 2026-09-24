@@ -13,7 +13,7 @@ UI and a built-in self-updater.
 - **Countdown/timer** broadcasts with configurable presets and an optional post-timer action
   (e.g. restart/shutdown notice).
 - **Media news** — auto-generated "what's new" digests from your libraries, sendable on demand
-  or on a weekly schedule.
+  or on a weekly schedule. Each recipient only sees titles from libraries they have access to.
 - **Welcome message** for first-time logins and **offline delivery** (queued until the user next
   logs in).
 - **User groups** — save named, reusable recipient groups from your user list, then pick them
@@ -21,13 +21,18 @@ UI and a built-in self-updater.
   time, so editing a group later also applies to any already-created scheduled message or timer
   that still references it.
 - **Status & history** view of every sent message with per-user delivery status.
-- **Self-update** — checks GitHub Releases for a newer version and installs it with one click.
+- **Self-update** — checks GitHub Releases for a newer version and installs it with one click,
+  after verifying its checksum and release signature.
 
 ## Credits
 
 Built using the same SDK patterns as **EmbyNotify** and **EmbyWeeklyDigest**, two plugins created
 by **[SFTech13](https://github.com/sftech13)**, which served as the architectural template for
 this project. This project is not affiliated with SFTech13.
+
+## Requirements
+
+Emby Server **4.9.5 or newer** (.NET 8). Tested up to 4.11.0.3.
 
 ## Installation
 
@@ -48,22 +53,48 @@ dotnet build -c Release
 Requires the .NET SDK. The project targets **netstandard2.0** on purpose — do not change this,
 Emby Server's plugin loader expects netstandard2.0 assemblies.
 
+The build output goes to `artifacts/bin/Release/netstandard2.0/EmbyCast.Plugin.dll` (set by
+`Directory.Build.props` in the repository root).
+
 ## Publishing a release (for self-update)
 
-The dashboard's "Check for Updates" / "Install Update" buttons verify the downloaded DLL's
-SHA-256 before installing it, and refuse to install a release with no checksum available.
+Before installing an update, the dashboard's "Install Update" button checks two things:
 
-**Nothing extra to do**: just attach the built `EmbyCast.Plugin.dll` as a release asset (with that
-exact name). GitHub automatically computes and exposes a SHA-256 digest for every uploaded release
-asset, and the plugin reads that directly - no separate checksum file needed. A release with no
-digest available (e.g. a GitHub Enterprise instance that doesn't support it) is refused by the
-self-updater rather than installed unverified.
+1. **Checksum** — the downloaded DLL must match the SHA-256 digest GitHub computes automatically
+   for every uploaded release asset. This catches corrupted or incomplete downloads.
+2. **Signature** — the DLL must carry a valid RSA signature (`EmbyCast.Plugin.dll.sig`) made with
+   the maintainer's private release key. The matching public key is compiled into the plugin
+   (`ReleaseSignature.cs`). Because the private key is never stored in the repository or on GitHub,
+   this also protects against a compromised GitHub account: a tampered DLL can't be signed.
 
-Note this only guards against a corrupted download, not a compromised GitHub account - since
-both the DLL and any checksum published alongside it come from the same release, an attacker
-with write access to the repo could fake both together. Real protection against that would need
-cryptographic signing with a key never stored in the repo, which this project deliberately
-doesn't do (not worth the added complexity for a project with a single maintainer).
+An update that fails either check is refused, never installed.
+
+### Release steps
+
+1. Bump `<VersionPrefix>` in `EmbyCast.Plugin/EmbyCast.Plugin.csproj`.
+2. Build: `dotnet build -c Release` (see above).
+3. Sign the built DLL with the private key:
+
+   ```
+   powershell -ExecutionPolicy Bypass -File EmbyCast.Plugin/tools/sign-release.ps1 ^
+     -DllPath artifacts/bin/Release/netstandard2.0/EmbyCast.Plugin.dll ^
+     -PrivateKeyPath <path to your private key .xml>
+   ```
+
+   This creates `EmbyCast.Plugin.dll.sig` next to the DLL. Do not rebuild after signing — the
+   signature would no longer match.
+4. Create a GitHub release tagged `vX.Y.Z` and attach **both** files with exactly these names:
+   `EmbyCast.Plugin.dll` and `EmbyCast.Plugin.dll.sig`.
+
+The signature check is active from v1.2.7 on, so every later release must be signed.
+
+### One-time key setup (maintainers only)
+
+`tools/sign-release.ps1 -GenerateKey -PrivateKeyPath <path>` creates the key pair and prints the
+public key to paste into `ReleaseSignature.cs`. Keep the private key file outside the repository
+and back it up: anyone holding it can publish updates that installed copies will accept, and
+losing it means existing installations can only be updated manually. If `PublicKeyModulus` is left
+empty (e.g. in a fork), the signature check is disabled and only the checksum is verified.
 
 ## License
 

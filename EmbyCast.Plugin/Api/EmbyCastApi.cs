@@ -445,6 +445,42 @@ namespace EmbyCast.Plugin.Api
         public bool IncludeOffline { get; set; } = true;
     }
 
+    // ---- Targeted settings writes -------------------------------------------
+    // These replace the dashboard's former use of Emby's generic updatePluginConfiguration(),
+    // which posted back the ENTIRE PluginConfiguration as it was when the page was loaded -
+    // silently reverting anything changed since by another tab or another endpoint (e.g. Media
+    // News auto-send or Welcome settings). Each route below writes only its own fields, via
+    // Plugin.MutateConfiguration.
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Cleanup/Settings", "POST", Summary = "Save the 'Geplante Reinigung' retention settings (days, max entries, included message types)")]
+    public class SaveCleanupSettings : IReturn<object>
+    {
+        public int OfflineMessageMaxAgeDays { get; set; } = 7;
+        public int HistoryMaxAgeDays { get; set; } = 14;
+        public int HistoryMaxEntries { get; set; } = 300;
+        public bool IncludeInstant { get; set; } = true;
+        public bool IncludeScheduled { get; set; } = true;
+        public bool IncludeTimer { get; set; } = true;
+        public bool IncludeMediaNews { get; set; } = true;
+        public bool IncludeWelcome { get; set; } = true;
+        public bool IncludeOffline { get; set; } = true;
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Cleanup/Enabled", "POST", Summary = "Turn the automatic daily cleanup pass on or off")]
+    public class SaveCleanupEnabled : IReturn<object>
+    {
+        public bool Enabled { get; set; }
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/TileOrder", "POST", Summary = "Save the dashboard tile order")]
+    public class SaveTileOrder : IReturn<object>
+    {
+        public string TileOrderCsv { get; set; }
+    }
+
     // =====================================================================
     // Service implementation
     //
@@ -487,18 +523,88 @@ namespace EmbyCast.Plugin.Api
         private const int MaxEpisodeTemplateLength = 200;
         private const int MaxGroupNameLength = 80;
 
-        private static string TruncateText(string text, int maxLength) =>
-            string.IsNullOrEmpty(text) || text.Length <= maxLength ? text : text.Substring(0, maxLength);
+        /// <summary>Cuts to at most maxLength UTF-16 code units without splitting a surrogate
+        /// pair: characters outside the Basic Multilingual Plane (most emoji) take two code units,
+        /// and cutting between them left a lone high surrogate - invalid UTF-16 that clients
+        /// render as a replacement character or reject.</summary>
+        internal static string TruncateText(string text, int maxLength)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxLength) return text;
+            var cut = maxLength;
+            if (cut > 0 && char.IsHighSurrogate(text[cut - 1])) cut--;
+            return text.Substring(0, cut);
+        }
 
         private static string HeaderTooLongError =>
             $"Header must be {MaxHeaderLength} characters or fewer.";
+
+        // ---- Input validation (M5/M7/M8) ---------------------------------------------------
+        // Same limits the dashboard's own inputs use (timer-total max=1440); LookbackDays is
+        // allowed up to MediaNewsService.MaxLookbackDays (more than the dashboard's max=90), so
+        // no previously saved value is rejected. Invalid values are rejected with the usual
+        // "Error field, still HTTP 200" response instead of being stored or silently replaced.
+        private const int MaxTimerMinutes = 1440;
+        private const int MaxLookbackDays = MediaNewsService.MaxLookbackDays;
+
+        private static string LookbackError =>
+            $"Lookback days must be between 1 and {MaxLookbackDays}.";
+
+        /// <summary>Strict, case-insensitive enum parse by NAME only. Enum.TryParse would also
+        /// accept any number ("7") and yield an undefined enum value, which then silently fell
+        /// into whichever branch the caller happened to check last. Null/blank means "not
+        /// specified" and yields <paramref name="fallback"/>; anything else unknown fails.</summary>
+        private static bool TryParseEnumName<T>(string value, T fallback, out T result) where T : struct
+        {
+            result = fallback;
+            if (string.IsNullOrWhiteSpace(value)) return true;
+            var trimmed = value.Trim();
+            foreach (T candidate in Enum.GetValues(typeof(T)))
+            {
+                if (string.Equals(candidate.ToString(), trimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    result = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Same range as the dashboard's timeout inputs (0-600 seconds, sent as ms).
+        /// 0 = the client's default behavior (no auto-dismiss).</summary>
+        private const int MaxTimeoutMs = 600000;
+
+        private static string TimeoutError =>
+            $"Timeout must be between 0 and {MaxTimeoutMs / 1000} seconds.";
+
+        private static bool IsValidTimeout(int timeoutMs) => timeoutMs >= 0 && timeoutMs <= MaxTimeoutMs;
+
+        private static string InvalidModeError(string value) =>
+            $"Unknown recipient mode '{value}' (expected Active, All or Specific).";
+
+        /// <summary>All *Utc request fields are documented as UTC, but the JSON binder hands them
+        /// over with whatever Kind the incoming string implied: "...Z" may arrive as Local
+        /// (converted to server time), a string without offset as Unspecified. Comparing those
+        /// against DateTime.UtcNow shifted the send time by the server's UTC offset. Local is
+        /// converted properly; Unspecified is taken at its word as UTC, per the API contract.</summary>
+        private static DateTime ToUtc(DateTime value)
+        {
+            switch (value.Kind)
+            {
+                case DateTimeKind.Utc: return value;
+                case DateTimeKind.Local: return value.ToUniversalTime();
+                default: return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+            }
+        }
 
         public async Task<object> Post(SendInstant request)
         {
             if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
                 return new SendResultDto { Error = HeaderTooLongError };
 
-            var mode = ParseMode(request.RecipientMode);
+            if (!IsValidTimeout(request.TimeoutMs))
+                return new SendResultDto { Error = TimeoutError };
+            if (!TryParseEnumName(request.RecipientMode, RecipientMode.Active, out var mode))
+                return new SendResultDto { Error = InvalidModeError(request.RecipientMode) };
             var outcome = await P.Delivery.SendAsync(
                 request.Header, TruncateText(request.Text, MaxMessageTextLength), request.TimeoutMs, mode, request.UserIds, MessageOrigin.Instant,
                 specificGroupIds: request.GroupIds
@@ -510,14 +616,20 @@ namespace EmbyCast.Plugin.Api
         {
             if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
                 return new { Error = HeaderTooLongError };
+            if (request.SendAtUtc == default(DateTime))
+                return new { Error = "SendAtUtc is required." };
+            if (!IsValidTimeout(request.TimeoutMs))
+                return new { Error = TimeoutError };
+            if (!TryParseEnumName(request.RecipientMode, RecipientMode.All, out var mode))
+                return new { Error = InvalidModeError(request.RecipientMode) };
 
             var record = new ScheduledMessageRecord
             {
                 Header = request.Header,
                 Text = TruncateText(request.Text, MaxMessageTextLength),
                 TimeoutMs = request.TimeoutMs,
-                SendAtUtc = request.SendAtUtc,
-                RecipientMode = request.RecipientMode,
+                SendAtUtc = ToUtc(request.SendAtUtc),
+                RecipientMode = mode.ToString(),
                 SpecificUserIds = request.UserIds ?? new List<string>(),
                 SpecificGroupIds = request.GroupIds ?? new List<string>()
             };
@@ -533,10 +645,16 @@ namespace EmbyCast.Plugin.Api
         {
             if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
                 return new { Error = HeaderTooLongError };
+            if (request.SendAtUtc == default(DateTime))
+                return new { Error = "SendAtUtc is required." };
+            if (!IsValidTimeout(request.TimeoutMs))
+                return new { Error = TimeoutError };
+            if (!TryParseEnumName(request.RecipientMode, RecipientMode.All, out var mode))
+                return new { Error = InvalidModeError(request.RecipientMode) };
 
             return P.Store.UpdateScheduled(
-                request.Id, request.Header, TruncateText(request.Text, MaxMessageTextLength), request.TimeoutMs, request.SendAtUtc,
-                request.RecipientMode, request.UserIds, request.GroupIds);
+                request.Id, request.Header, TruncateText(request.Text, MaxMessageTextLength), request.TimeoutMs, ToUtc(request.SendAtUtc),
+                mode.ToString(), request.UserIds, request.GroupIds);
         }
 
         public object Delete(CancelScheduled request)
@@ -560,21 +678,31 @@ namespace EmbyCast.Plugin.Api
             if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
                 return new { Error = HeaderTooLongError };
 
+            // Validated up front so TimerService's own ArgumentException guard (totalMinutes > 0)
+            // is never what reports a bad value - that used to surface as an HTTP 500.
+            if (request.TotalMinutes < 1 || request.TotalMinutes > MaxTimerMinutes)
+                return new { Success = false, Error = $"Countdown length must be between 1 and {MaxTimerMinutes} minutes." };
+            if (!IsValidTimeout(request.TimeoutMs))
+                return new { Success = false, Error = TimeoutError };
+            if (!TryParseEnumName(request.PostAction, PostTimerAction.None, out var postAction))
+                return new { Success = false, Error = $"Unknown post-timer action '{request.PostAction}'." };
+            if (!TryParseEnumName(request.RecipientMode, RecipientMode.Active, out var mode))
+                return new { Success = false, Error = InvalidModeError(request.RecipientMode) };
+
             if (P.Timer.HasActiveOrPendingTimer())
                 return new { Success = false, AlreadyExists = true };
 
-            var postAction = Enum.TryParse<PostTimerAction>(request.PostAction, out var pa) ? pa : PostTimerAction.None;
-            var mode = ParseMode(request.RecipientMode);
             var textTemplate = TruncateText(request.TextTemplate, MaxMessageTextLength);
+            var scheduledStartUtc = request.ScheduledStartUtc.HasValue ? ToUtc(request.ScheduledStartUtc.Value) : (DateTime?)null;
 
             try
             {
-                if (request.ScheduledStartUtc.HasValue && request.ScheduledStartUtc.Value > DateTime.UtcNow)
+                if (scheduledStartUtc.HasValue && scheduledStartUtc.Value > DateTime.UtcNow)
                 {
                     return P.Timer.ScheduleTimer(
                         request.Header, textTemplate, request.TotalMinutes,
                         request.PresetMinutes, postAction, mode, request.UserIds,
-                        request.ScheduledStartUtc.Value, request.TimeoutMs, request.GroupIds);
+                        scheduledStartUtc.Value, request.TimeoutMs, request.GroupIds);
                 }
 
                 // ScheduledStartUtc omitted, or set to a time that's already in the past (e.g.
@@ -587,6 +715,11 @@ namespace EmbyCast.Plugin.Api
             catch (InvalidOperationException)
             {
                 return new { Success = false, AlreadyExists = true };
+            }
+            catch (ArgumentException ex)
+            {
+                // Backstop only - the checks above should already have caught any bad argument.
+                return new { Success = false, Error = ex.Message };
             }
         }
 
@@ -604,6 +737,10 @@ namespace EmbyCast.Plugin.Api
                 return new MediaNewsSendResult { Error = HeaderTooLongError };
             if (!string.IsNullOrEmpty(request.EpisodeTemplate) && request.EpisodeTemplate.Length > MaxEpisodeTemplateLength)
                 return new MediaNewsSendResult { Error = $"Episode template must be {MaxEpisodeTemplateLength} characters or fewer." };
+            if (request.LookbackDays < 1 || request.LookbackDays > MaxLookbackDays)
+                return new MediaNewsSendResult { Error = LookbackError };
+            if (!TryParseEnumName(request.RecipientMode, RecipientMode.Active, out var mode))
+                return new MediaNewsSendResult { Error = InvalidModeError(request.RecipientMode) };
 
             var libraryManager = P.ApplicationHost.Resolve<ILibraryManager>();
             if (libraryManager == null)
@@ -647,14 +784,21 @@ namespace EmbyCast.Plugin.Api
                 return result;
             }
 
-            var text = P.MediaNews.ToMessageText(digest, request.Language);
             var header = string.IsNullOrWhiteSpace(request.Header) ? "What's New" : request.Header;
-            var mode = ParseMode(request.RecipientMode);
+            var language = request.Language;
 
-            var outcome = await P.Delivery.SendAsync(
-                header, text, 0, mode, request.UserIds, MessageOrigin.MediaNews,
-                webOnly: request.WebOnly, specificGroupIds: request.GroupIds
-            ).ConfigureAwait(false);
+            // Personalized per recipient: the digest above is built without any user context, so
+            // each user's copy is narrowed to the titles they may actually access (library access
+            // + parental rating, see MediaNewsResult.FilterForUser) - otherwise a send to "All"
+            // would list titles from restricted libraries to everyone. Users with nothing
+            // accessible are skipped (counted in NoContent).
+            var outcome = await P.Delivery.SendPersonalizedAsync(
+                header, mode, request.UserIds, request.GroupIds, request.WebOnly, MessageOrigin.MediaNews,
+                user =>
+                {
+                    var own = digest.FilterForUser(user);
+                    return own.IsEmpty ? null : P.MediaNews.ToMessageText(own, language);
+                }).ConfigureAwait(false);
 
             result.SendOutcome = outcome;
             // Series and Episodes are independent (both, either, or neither can be requested),
@@ -666,7 +810,8 @@ namespace EmbyCast.Plugin.Api
             if (request.IncludeNewEpisodes) summaryParts.Add($"{digest.Episodes.Count} episode(s)");
             var contentSummary = string.Join(", ", summaryParts);
             result.Message = $"Sent ({contentSummary}) - " +
-                              $"{outcome.Delivered} delivered, {outcome.Pending} pending, {outcome.Failed} failed.";
+                              $"{outcome.Delivered} delivered, {outcome.Pending} pending, {outcome.Failed} failed" +
+                              (outcome.NoContent > 0 ? $", {outcome.NoContent} skipped (nothing new in libraries they can access)." : ".");
             return result;
         }
 
@@ -676,6 +821,9 @@ namespace EmbyCast.Plugin.Api
         /// fields (passed in the request), same as the real send.</summary>
         public object Post(PreviewMediaNews request)
         {
+            if (request.LookbackDays < 1 || request.LookbackDays > MaxLookbackDays)
+                return new MediaNewsPreviewDto { Error = LookbackError };
+
             var libraryManager = P.ApplicationHost.Resolve<ILibraryManager>();
             if (libraryManager == null)
                 return new MediaNewsPreviewDto { Error = "ILibraryManager not available" };
@@ -753,7 +901,7 @@ namespace EmbyCast.Plugin.Api
                 Day = config.MediaNewsAutoSendDay,
                 Hour = config.MediaNewsAutoSendHour,
                 Minute = config.MediaNewsAutoSendMinute,
-                LastSentUtc = config.MediaNewsLastAutoSentUtc,
+                LastSentUtc = P.Store.GetMediaNewsLastAutoSentUtc(),
                 NextRunUtc = MediaNewsAutoScheduler.GetNextOccurrence(
                     DateTime.UtcNow, config.MediaNewsAutoSendDay, config.MediaNewsAutoSendHour, config.MediaNewsAutoSendMinute),
                 Header = config.MediaNewsHeader,
@@ -773,24 +921,36 @@ namespace EmbyCast.Plugin.Api
                 return new MediaNewsAutoStatusDto { Error = HeaderTooLongError };
             if (!string.IsNullOrEmpty(request.EpisodeTemplate) && request.EpisodeTemplate.Length > MaxEpisodeTemplateLength)
                 return new MediaNewsAutoStatusDto { Error = $"Episode template must be {MaxEpisodeTemplateLength} characters or fewer." };
+            // An undefined weekday (e.g. 9) used to be stored as-is: GetLastOccurrence then never
+            // matched and fell back to "7 days ago", so auto-send silently never ran.
+            if (!Enum.IsDefined(typeof(DayOfWeek), request.Day))
+                return new MediaNewsAutoStatusDto { Error = "Day must be a valid weekday." };
+            if (request.Hour < 0 || request.Hour > 23 || request.Minute < 0 || request.Minute > 59)
+                return new MediaNewsAutoStatusDto { Error = "Time must be between 00:00 and 23:59." };
+            if (request.LookbackDays < 1 || request.LookbackDays > MaxLookbackDays)
+                return new MediaNewsAutoStatusDto { Error = LookbackError };
+            if (!TryParseEnumName(request.RecipientMode, RecipientMode.All, out var autoMode))
+                return new MediaNewsAutoStatusDto { Error = InvalidModeError(request.RecipientMode) };
 
+            P.MutateConfiguration(c =>
+            {
+                c.MediaNewsAutoSendEnabled = request.Enabled;
+                c.MediaNewsAutoSendDay = request.Day;
+                c.MediaNewsAutoSendHour = request.Hour;
+                c.MediaNewsAutoSendMinute = request.Minute;
+                c.MediaNewsLookbackDays = request.LookbackDays;
+                c.MediaNewsLibraryIdsCsv = request.LibraryIdsCsv ?? "";
+                c.MediaNewsRecipientMode = autoMode.ToString();
+                c.MediaNewsSpecificUserIdsCsv = request.SpecificUserIdsCsv ?? "";
+                c.MediaNewsSpecificGroupIdsCsv = request.SpecificGroupIdsCsv ?? "";
+                c.MediaNewsSkipWhenEmpty = request.SkipWhenEmpty;
+                c.MediaNewsHeader = string.IsNullOrWhiteSpace(request.Header) ? "What's New" : request.Header;
+                c.MediaNewsIncludeNewSeries = request.IncludeNewSeries;
+                c.MediaNewsIncludeNewEpisodes = request.IncludeNewEpisodes;
+                c.MediaNewsEpisodeTemplate = request.EpisodeTemplate;
+                c.MediaNewsAutoWebOnly = request.WebOnly;
+            });
             var config = P.Configuration;
-            config.MediaNewsAutoSendEnabled = request.Enabled;
-            config.MediaNewsAutoSendDay = request.Day;
-            config.MediaNewsAutoSendHour = request.Hour;
-            config.MediaNewsAutoSendMinute = request.Minute;
-            config.MediaNewsLookbackDays = request.LookbackDays;
-            config.MediaNewsLibraryIdsCsv = request.LibraryIdsCsv ?? "";
-            config.MediaNewsRecipientMode = request.RecipientMode;
-            config.MediaNewsSpecificUserIdsCsv = request.SpecificUserIdsCsv ?? "";
-            config.MediaNewsSpecificGroupIdsCsv = request.SpecificGroupIdsCsv ?? "";
-            config.MediaNewsSkipWhenEmpty = request.SkipWhenEmpty;
-            config.MediaNewsHeader = string.IsNullOrWhiteSpace(request.Header) ? "What's New" : request.Header;
-            config.MediaNewsIncludeNewSeries = request.IncludeNewSeries;
-            config.MediaNewsIncludeNewEpisodes = request.IncludeNewEpisodes;
-            config.MediaNewsEpisodeTemplate = request.EpisodeTemplate;
-            config.MediaNewsAutoWebOnly = request.WebOnly;
-            P.PersistConfiguration(config);
 
             var typeFlags = ResolveMediaNewsLibraryTypeFlags(config.MediaNewsLibraryIdsCsv);
             return new MediaNewsAutoStatusDto
@@ -799,7 +959,7 @@ namespace EmbyCast.Plugin.Api
                 Day = config.MediaNewsAutoSendDay,
                 Hour = config.MediaNewsAutoSendHour,
                 Minute = config.MediaNewsAutoSendMinute,
-                LastSentUtc = config.MediaNewsLastAutoSentUtc,
+                LastSentUtc = P.Store.GetMediaNewsLastAutoSentUtc(),
                 NextRunUtc = MediaNewsAutoScheduler.GetNextOccurrence(
                     DateTime.UtcNow, config.MediaNewsAutoSendDay, config.MediaNewsAutoSendHour, config.MediaNewsAutoSendMinute),
                 Header = config.MediaNewsHeader,
@@ -935,12 +1095,14 @@ namespace EmbyCast.Plugin.Api
             if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
                 return new WelcomeMessageDto { Error = HeaderTooLongError };
 
+            P.MutateConfiguration(c =>
+            {
+                c.WelcomeMessageEnabled = request.Enabled;
+                c.WelcomeMessageHeader = string.IsNullOrWhiteSpace(request.Header) ? "Welcome!" : request.Header.Trim();
+                c.WelcomeMessageText = TruncateText((request.Text ?? "").Trim(), MaxMessageTextLength);
+                if (!string.IsNullOrEmpty(request.Language)) c.Language = request.Language;
+            });
             var config = P.Configuration;
-            config.WelcomeMessageEnabled = request.Enabled;
-            config.WelcomeMessageHeader = string.IsNullOrWhiteSpace(request.Header) ? "Welcome!" : request.Header.Trim();
-            config.WelcomeMessageText = TruncateText((request.Text ?? "").Trim(), MaxMessageTextLength);
-            if (!string.IsNullOrEmpty(request.Language)) config.Language = request.Language;
-            P.PersistConfiguration(config);
 
             return new WelcomeMessageDto
             {
@@ -984,10 +1146,12 @@ namespace EmbyCast.Plugin.Api
             var count = P.Store.UnmarkAllWelcomed();
             P.Store.GetLastUnmarkExistingWelcomed(out var lastRunUtc, out _);
 
-            var config = P.Configuration;
-            var wasEnabled = config.WelcomeMessageEnabled;
-            config.WelcomeMessageEnabled = false;
-            P.PersistConfiguration(config);
+            var wasEnabled = false;
+            P.MutateConfiguration(c =>
+            {
+                wasEnabled = c.WelcomeMessageEnabled;
+                c.WelcomeMessageEnabled = false;
+            });
 
             return new { Success = true, Count = count, LastRunUtc = lastRunUtc, WasEnabled = wasEnabled };
         }
@@ -1051,6 +1215,48 @@ namespace EmbyCast.Plugin.Api
             return new { Success = true, Count = count };
         }
 
+        // Same limits the dashboard enforces client-side (see config.js's .cleanup-save
+        // handler) - re-checked here so a direct API call can't store values the cleanup pass
+        // would misbehave with.
+        private const int MinHistoryMaxEntries = 20;
+        private const int MaxHistoryMaxEntries = 5000;
+
+        public object Post(SaveCleanupSettings request)
+        {
+            if (request.OfflineMessageMaxAgeDays < 1 || request.HistoryMaxAgeDays < 1)
+                return new { Success = false, Error = "Retention days must be at least 1." };
+            if (request.HistoryMaxAgeDays < request.OfflineMessageMaxAgeDays)
+                return new { Success = false, Error = "History retention must not be shorter than offline-message retention." };
+            if (request.HistoryMaxEntries < MinHistoryMaxEntries || request.HistoryMaxEntries > MaxHistoryMaxEntries)
+                return new { Success = false, Error = $"Max history entries must be between {MinHistoryMaxEntries} and {MaxHistoryMaxEntries}." };
+
+            P.MutateConfiguration(c =>
+            {
+                c.OfflineMessageMaxAgeDays = request.OfflineMessageMaxAgeDays;
+                c.HistoryMaxAgeDays = request.HistoryMaxAgeDays;
+                c.HistoryMaxEntries = request.HistoryMaxEntries;
+                c.HistoryCleanupIncludeInstant = request.IncludeInstant;
+                c.HistoryCleanupIncludeScheduled = request.IncludeScheduled;
+                c.HistoryCleanupIncludeTimer = request.IncludeTimer;
+                c.HistoryCleanupIncludeMediaNews = request.IncludeMediaNews;
+                c.HistoryCleanupIncludeWelcome = request.IncludeWelcome;
+                c.HistoryCleanupIncludeOffline = request.IncludeOffline;
+            });
+            return new { Success = true };
+        }
+
+        public object Post(SaveCleanupEnabled request)
+        {
+            P.MutateConfiguration(c => c.CleanupEnabled = request.Enabled);
+            return new { Success = true, Enabled = request.Enabled };
+        }
+
+        public object Post(SaveTileOrder request)
+        {
+            P.MutateConfiguration(c => c.TileOrderCsv = request.TileOrderCsv ?? "");
+            return new { Success = true };
+        }
+
         private static HashSet<MessageOrigin> ToIncludedTypes(PurgeHistoryNow request)
         {
             var includedTypes = new HashSet<MessageOrigin>();
@@ -1090,9 +1296,6 @@ namespace EmbyCast.Plugin.Api
         {
             return await P.InstallUpdateAsync().ConfigureAwait(false);
         }
-
-        private static RecipientMode ParseMode(string mode) =>
-            Enum.TryParse<RecipientMode>(mode, out var m) ? m : RecipientMode.Active;
 
         private static SendResultDto ToDto(SendOutcome outcome) => new SendResultDto
         {

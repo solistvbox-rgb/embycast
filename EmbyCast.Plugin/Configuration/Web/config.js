@@ -2786,22 +2786,35 @@ define(['baseView'], function (BaseView) {
                 return;
             }
 
-            pluginConfig.OfflineMessageMaxAgeDays = offlineDays;
-            pluginConfig.HistoryMaxAgeDays = historyDays;
-            pluginConfig.HistoryMaxEntries = maxEntries;
+            // Dedicated endpoint that writes only these fields - NOT the generic
+            // ApiClient.updatePluginConfiguration(pluginConfig), which would post back the whole
+            // configuration as loaded with this page and revert anything changed since (e.g. by
+            // another tab or another section's own endpoint). See EmbyCastApi.SaveCleanupSettings.
             var types = getCleanupTypeCheckboxes();
-            pluginConfig.HistoryCleanupIncludeInstant = types.IncludeInstant;
-            pluginConfig.HistoryCleanupIncludeScheduled = types.IncludeScheduled;
-            pluginConfig.HistoryCleanupIncludeTimer = types.IncludeTimer;
-            pluginConfig.HistoryCleanupIncludeMediaNews = types.IncludeMediaNews;
-            pluginConfig.HistoryCleanupIncludeWelcome = types.IncludeWelcome;
-            pluginConfig.HistoryCleanupIncludeOffline = types.IncludeOffline;
+            var payload = {
+                OfflineMessageMaxAgeDays: offlineDays,
+                HistoryMaxAgeDays: historyDays,
+                HistoryMaxEntries: maxEntries,
+                IncludeInstant: types.IncludeInstant,
+                IncludeScheduled: types.IncludeScheduled,
+                IncludeTimer: types.IncludeTimer,
+                IncludeMediaNews: types.IncludeMediaNews,
+                IncludeWelcome: types.IncludeWelcome,
+                IncludeOffline: types.IncludeOffline
+            };
 
-            ApiClient.updatePluginConfiguration(PLUGIN_ID, pluginConfig).then(function (result) {
+            ajax('POST', 'EmbyCast/Cleanup/Settings', payload).then(function (result) {
+                if (result && result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
+                pluginConfig.OfflineMessageMaxAgeDays = offlineDays;
+                pluginConfig.HistoryMaxAgeDays = historyDays;
+                pluginConfig.HistoryMaxEntries = maxEntries;
+                pluginConfig.HistoryCleanupIncludeInstant = types.IncludeInstant;
+                pluginConfig.HistoryCleanupIncludeScheduled = types.IncludeScheduled;
+                pluginConfig.HistoryCleanupIncludeTimer = types.IncludeTimer;
+                pluginConfig.HistoryCleanupIncludeMediaNews = types.IncludeMediaNews;
+                pluginConfig.HistoryCleanupIncludeWelcome = types.IncludeWelcome;
+                pluginConfig.HistoryCleanupIncludeOffline = types.IncludeOffline;
                 showStatus(statusEl, t('msgCleanupSaved'), 'ok');
-                if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
-                    try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
-                }
             }, function (err) {
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
             });
@@ -2818,17 +2831,14 @@ define(['baseView'], function (BaseView) {
             if (!pluginConfig) return;
             var enabled = view.querySelector('.cleanup-enabled').checked;
             pluginConfig.CleanupEnabled = enabled;
-            ApiClient.updatePluginConfiguration(PLUGIN_ID, pluginConfig).then(function (result) {
+            // Dedicated endpoint (see EmbyCastApi.SaveCleanupEnabled) - same reasoning as the
+            // ".cleanup-save" handler above for not using updatePluginConfiguration().
+            ajax('POST', 'EmbyCast/Cleanup/Enabled', { Enabled: enabled }).then(function () {
                 showStatus(statusEl, t(enabled ? 'msgCleanupEnabled' : 'msgCleanupDisabled'), 'ok');
-                if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
-                    try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
-                }
                 renderTileBadges();
             }, function (err) {
-                // Revert both the visible switch AND the shared pluginConfig object on failure -
-                // reverting only the checkbox would leave pluginConfig.CleanupEnabled holding the
-                // never-actually-persisted value, which the unrelated ".cleanup-save" button would
-                // then silently write out on its next click.
+                // Revert both the visible switch AND the shared pluginConfig object on failure,
+                // so the tile badge (renderTileBadges) doesn't show a never-persisted state.
                 view.querySelector('.cleanup-enabled').checked = !enabled;
                 pluginConfig.CleanupEnabled = !enabled;
                 showStatus(statusEl, t('errorPrefix') + (err && (err.statusText || err.status) || 'unknown'), 'err');
@@ -2912,10 +2922,9 @@ define(['baseView'], function (BaseView) {
         function saveTileOrder() {
             if (!pluginConfig) return;
             pluginConfig.TileOrderCsv = tileOrder.join(',');
-            ApiClient.updatePluginConfiguration(PLUGIN_ID, pluginConfig).then(function (result) {
-                if (window.Dashboard && Dashboard.processPluginConfigurationUpdateResult) {
-                    try { Dashboard.processPluginConfigurationUpdateResult(result); } catch (e) { /* ignore */ }
-                }
+            // Dedicated endpoint (see EmbyCastApi.SaveTileOrder) - same reasoning as the
+            // ".cleanup-save" handler for not using updatePluginConfiguration().
+            ajax('POST', 'EmbyCast/TileOrder', { TileOrderCsv: pluginConfig.TileOrderCsv }).then(function () {
                 showStatus(view.querySelector('#tileOrderStatus'), t('msgTileOrderSaved'), 'ok');
             }, function () { /* non-critical - the new order still applies to this page instance */ });
         }

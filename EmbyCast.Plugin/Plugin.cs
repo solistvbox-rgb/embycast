@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
-using System.Reflection;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using EmbyCast.Plugin.Configuration;
 using EmbyCast.Plugin.Services;
@@ -54,7 +54,36 @@ namespace EmbyCast.Plugin
             Timer = new TimerService(Delivery, Store, applicationHost, logManager);
             MediaNews = new MediaNewsService(logManager);
 
+            // NOTE: Configuration must NOT be touched in this constructor. Emby assigns the
+            // plugin's file path (which BasePlugin needs to locate the config XML) only AFTER
+            // constructing it, so reading Configuration here throws ArgumentNullException
+            // ("path2") inside BasePlugin.LoadConfiguration - confirmed on Emby 4.11.0.3, and the
+            // reason the series-mode migration below silently never ran from here. One-time
+            // migrations therefore run from RunStartupMigrations(), called by
+            // EmbyCastEntryPoint.Run().
+        }
+
+        private int _migrationsRan;
+
+        /// <summary>One-time data migrations that need Configuration. Called from
+        /// EmbyCastEntryPoint.Run() - after Emby has fully initialized the plugin, and before the
+        /// background loops start, so e.g. the media-news scheduler already sees the migrated
+        /// last-sent timestamp on its first tick. Safe to call more than once (runs only the
+        /// first time); each migration is individually non-fatal.</summary>
+        internal void RunStartupMigrations()
+        {
+            if (Interlocked.Exchange(ref _migrationsRan, 1) == 1) return;
+
             MigrateLegacySeriesMode();
+
+            try
+            {
+                Store.MigrateMediaNewsLastAutoSentUtc(Configuration.MediaNewsLastAutoSentUtc);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("EmbyCast: media-news last-sent migration failed (non-fatal).", ex);
+            }
         }
 
         /// <summary>
@@ -67,11 +96,9 @@ namespace EmbyCast.Plugin
         /// back as their own defaults (true/false) on first load post-update - this reproduces
         /// their old selection once, then blanks the legacy field so it only ever runs once
         /// (an admin unchecking "New episodes" afterward stays unchecked across restarts).
-        /// BasePlugin&lt;T&gt; loads Configuration from disk before the derived constructor body
-        /// runs, same assumption other Emby plugins in this codebase's lineage (EmbyNotify /
-        /// EmbyWeeklyDigest) already rely on for constructor-time config access - wrapped in
-        /// try/catch regardless, since a failed migration should never prevent the plugin from
-        /// loading.
+        /// Runs from RunStartupMigrations() (see the constructor's note for why not from the
+        /// constructor) - wrapped in try/catch regardless, since a failed migration should never
+        /// prevent the plugin from loading.
         /// </summary>
         private void MigrateLegacySeriesMode()
         {
@@ -93,7 +120,7 @@ namespace EmbyCast.Plugin
             }
             catch (Exception ex)
             {
-                _logger.Warn("EmbyCast: legacy series-mode migration failed (non-fatal): {0}", ex.Message);
+                _logger.ErrorException("EmbyCast: legacy series-mode migration failed (non-fatal).", ex);
             }
         }
 
@@ -158,6 +185,10 @@ namespace EmbyCast.Plugin
         {
             base.OnUninstalling();
 
+            // Background loops keep running until the server restarts; from here on neither the
+            // store (see MessageStore.DeleteStoreFile) nor MutateConfiguration may write again,
+            // or they'd recreate the files deleted below.
+            _uninstalling = true;
             Store.DeleteStoreFile();
 
             try
@@ -173,7 +204,7 @@ namespace EmbyCast.Plugin
             }
             catch (Exception ex)
             {
-                _logger.Error("EmbyCast: failed to delete configuration XML during uninstall: {0}", ex.Message);
+                _logger.ErrorException("EmbyCast: failed to delete configuration XML during uninstall.", ex);
             }
         }
 
@@ -185,12 +216,24 @@ namespace EmbyCast.Plugin
 
         public ILogger Logger => _logger;
 
-        /// <summary>BasePlugin.SaveConfiguration() is protected; this wraps it so services
-        /// (which are plain classes, not subclasses of Plugin) can persist configuration
-        /// changes such as MediaNewsLastAutoSentUtc.</summary>
-        public void PersistConfiguration(PluginConfiguration config)
+        private readonly object _configLock = new object();
+        private volatile bool _uninstalling;
+
+        /// <summary>Applies a targeted change to the live configuration and saves it, serialized
+        /// with every other change made through here - so two dashboard requests can't
+        /// interleave their mutate/save steps. Every write in this plugin changes only the
+        /// fields it owns; the dashboard deliberately no longer uses Emby's generic
+        /// updatePluginConfiguration(), which posted back the WHOLE configuration as loaded when
+        /// the page was opened and thereby reverted anything changed since (by another tab or
+        /// another endpoint). BasePlugin.SaveConfiguration() is protected, which is also why
+        /// plain service classes go through this method.</summary>
+        public void MutateConfiguration(Action<PluginConfiguration> mutate)
         {
-            SaveConfiguration();
+            lock (_configLock)
+            {
+                mutate(Configuration);
+                if (!_uninstalling) SaveConfiguration();
+            }
         }
 
         /// <summary>
@@ -198,13 +241,10 @@ namespace EmbyCast.Plugin
         /// and atomically swaps it in for the currently-loaded plugin DLL on disk. Mirrors the
         /// EmbyNotify/EmbyWeeklyDigest reference plugins' approach exactly, including the
         /// .bak-then-swap sequence (so a failed write can't leave the plugin folder without a
-        /// working DLL) and the best-effort, reflection-based call to the host's
-        /// "NotifyPendingRestart" method - that method isn't part of the stable public SDK
-        /// surface used elsewhere in this plugin, so reflection avoids a hard compile-time
-        /// dependency on an exact signature/availability that can vary by Emby Server build; if
-        /// it's missing or fails, the update still installs correctly, the admin just won't see
-        /// Emby's built-in "restart pending" banner and should restart manually to load the new
-        /// DLL (the InstallUpdateResult.Message returned below says so either way).
+        /// working DLL) and the best-effort call to IApplicationHost.NotifyPendingRestart(); if
+        /// that fails, the update is still installed, the admin just won't see Emby's built-in
+        /// "restart pending" banner and should restart manually to load the new DLL (the
+        /// InstallUpdateResult.Message returned below says so either way).
         ///
         /// Integrity check: HTTPS protects the download in transit but not against the release
         /// asset itself being wrong at the source, so before anything is written to disk this
@@ -212,8 +252,38 @@ namespace EmbyCast.Plugin
         /// in UpdateChecker.ExpectedSha256 (read straight from GitHub's own automatic asset
         /// digest, no extra request needed). A release with no digest available, or one that
         /// doesn't match, is refused rather than silently installed.
+        ///
+        /// Concurrency: guarded by _installLock - two overlapping installs (double-click, two admin
+        /// tabs) shared the same .temp/.bak paths, and the second could delete the first one's
+        /// .bak (the only copy of the original DLL) mid-swap. A second request while one is
+        /// running is refused immediately rather than queued.
+        ///
+        /// Signature: if ReleaseSignature has a public key configured, the release must also
+        /// carry a valid "EmbyCast.Plugin.dll.sig" - unlike the checksum, that can't be forged
+        /// by someone who only controls the GitHub account/repo. See ReleaseSignature.cs.
         /// </summary>
         internal async Task<InstallUpdateResult> InstallUpdateAsync()
+        {
+            if (!await _installLock.WaitAsync(0).ConfigureAwait(false))
+                return new InstallUpdateResult { Message = "An update is already being installed - please wait for it to finish." };
+            try
+            {
+                return await InstallUpdateCoreAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _installLock.Release();
+            }
+        }
+
+        private static readonly SemaphoreSlim _installLock = new SemaphoreSlim(1, 1);
+
+        private static bool IsGitHubUrl(string url, out Uri uri) =>
+            Uri.TryCreate(url, UriKind.Absolute, out uri) &&
+            uri.Scheme == Uri.UriSchemeHttps &&
+            string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase);
+
+        private async Task<InstallUpdateResult> InstallUpdateCoreAsync()
         {
             var result = new InstallUpdateResult();
             try
@@ -253,11 +323,24 @@ namespace EmbyCast.Plugin
                 // follows that redirect automatically and correctly, so it must NOT also be
                 // whitelisted here - locking down that redirect target would break every future
                 // update the moment GitHub rotates its CDN domain.
-                if (!Uri.TryCreate(check.DownloadUrl, UriKind.Absolute, out var downloadUri) ||
-                    !string.Equals(downloadUri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+                if (!IsGitHubUrl(check.DownloadUrl, out _))
                 {
-                    result.Message = "Download URL did not point to github.com - refusing to install for safety.";
+                    result.Message = "Download URL did not point to https://github.com - refusing to install for safety.";
                     return result;
+                }
+
+                if (ReleaseSignature.IsConfigured)
+                {
+                    if (string.IsNullOrEmpty(check.SignatureUrl))
+                    {
+                        result.Message = $"This release has no signature ({ReleaseSignature.SignatureAssetName}) - refusing to install an unsigned update. Install the DLL manually if you trust it.";
+                        return result;
+                    }
+                    if (!IsGitHubUrl(check.SignatureUrl, out _))
+                    {
+                        result.Message = "Signature URL did not point to https://github.com - refusing to install for safety.";
+                        return result;
+                    }
                 }
 
                 var currentDll = typeof(Plugin).Assembly.Location;
@@ -274,12 +357,15 @@ namespace EmbyCast.Plugin
                 var bakPath = currentDll + ".bak";
 
                 byte[] dllBytes;
+                string signatureText = null;
                 string expectedChecksum = check.ExpectedSha256; // straight from GitHub's asset digest
                 using (var http = new HttpClient())
                 {
                     http.DefaultRequestHeaders.UserAgent.ParseAdd("EmbyCast-Plugin/1.0");
                     http.Timeout = TimeSpan.FromSeconds(60);
                     dllBytes = await http.GetByteArrayAsync(check.DownloadUrl).ConfigureAwait(false);
+                    if (ReleaseSignature.IsConfigured)
+                        signatureText = await http.GetStringAsync(check.SignatureUrl).ConfigureAwait(false);
                 }
 
                 if (dllBytes.Length < 1024)
@@ -307,6 +393,13 @@ namespace EmbyCast.Plugin
                     return result;
                 }
 
+                if (ReleaseSignature.IsConfigured && !ReleaseSignature.Verify(dllBytes, signatureText))
+                {
+                    _logger.Error("EmbyCast InstallUpdate: release signature is invalid for v{0} - update refused.", check.LatestVersion);
+                    result.Message = "Signature check failed - the downloaded DLL was not signed with the EmbyCast release key, so it was NOT installed. Do not install this release manually either until you know why.";
+                    return result;
+                }
+
                 File.WriteAllBytes(tempPath, dllBytes);
                 try
                 {
@@ -326,14 +419,14 @@ namespace EmbyCast.Plugin
 
                 try
                 {
-                    var notifyMethod = _applicationHost.GetType().GetMethod(
-                        "NotifyPendingRestart",
-                        BindingFlags.Public | BindingFlags.Instance);
-                    notifyMethod?.Invoke(_applicationHost, null);
+                    // Shows Emby's own "restart pending" banner in the dashboard. Part of
+                    // IApplicationHost in the SDK this compiles against, so called directly
+                    // rather than looked up via reflection.
+                    _applicationHost.NotifyPendingRestart();
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warn("EmbyCast: NotifyPendingRestart failed: {0}", ex.Message);
+                    _logger.ErrorException("EmbyCast: NotifyPendingRestart failed (update is installed anyway).", ex);
                 }
 
                 result.Success = true;
@@ -341,8 +434,8 @@ namespace EmbyCast.Plugin
             }
             catch (Exception ex)
             {
-                _logger.Error("EmbyCast InstallUpdate failed: {0}", ex.Message);
-                result.Message = "Install failed: " + ex.Message;
+                _logger.ErrorException("EmbyCast InstallUpdate failed.", ex);
+                result.Message = "Install failed - see the Emby server log for details. The previously installed version was kept.";
             }
             return result;
         }

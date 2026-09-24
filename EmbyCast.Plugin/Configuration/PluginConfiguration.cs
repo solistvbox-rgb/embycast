@@ -89,8 +89,9 @@ namespace EmbyCast.Plugin.Configuration
         public DayOfWeek MediaNewsAutoSendDay { get; set; } = DayOfWeek.Friday;
         public int MediaNewsAutoSendHour { get; set; } = 18;
         public int MediaNewsAutoSendMinute { get; set; } = 0;
-        /// <summary>UTC timestamp of the last automatic media-news send, used to avoid
-        /// double-sending the same weekly slot after a server restart.</summary>
+        /// <summary>LEGACY - read once at startup to migrate into the store, never written or
+        /// otherwise used anymore. The last-sent timestamp now lives in
+        /// StoreData.MediaNewsLastAutoSentUtc (see its doc comment for why).</summary>
         public DateTime? MediaNewsLastAutoSentUtc { get; set; }
         /// <summary>"Send only to web-browser sessions" for the recurring weekly auto-send -
         /// captured from the (shared, see MediaNewsRecipientMode's doc comment for the same

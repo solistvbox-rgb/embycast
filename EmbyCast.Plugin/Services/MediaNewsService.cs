@@ -36,6 +36,42 @@ namespace EmbyCast.Plugin.Services
         /// template. Populated when includeNewEpisodes was true; independent of Series above.</summary>
         public List<string> Episodes { get; } = new List<string>();
         public bool IsEmpty => Movies.Count == 0 && Series.Count == 0 && Episodes.Count == 0;
+
+        // The library items behind each line above, index-aligned with Movies/Series/Episodes,
+        // so the digest can be narrowed per recipient (see FilterForUser). Not serialized - the
+        // API only ever returns counts/text built from this, never the result object itself.
+        private readonly List<BaseItem> _movieItems = new List<BaseItem>();
+        private readonly List<BaseItem> _seriesItems = new List<BaseItem>();
+        private readonly List<BaseItem> _episodeItems = new List<BaseItem>();
+
+        internal void AddMovie(string line, BaseItem item) { Movies.Add(line); _movieItems.Add(item); }
+        internal void AddSeries(string line, BaseItem item) { Series.Add(line); _seriesItems.Add(item); }
+        internal void AddEpisode(string line, BaseItem item) { Episodes.Add(line); _episodeItems.Add(item); }
+
+        /// <summary>Returns a copy containing only the entries this user may actually see -
+        /// library access and parental rating, via BaseItem.IsVisibleStandalone (which also
+        /// checks the item's parent folders, i.e. whether the user has access to its library).
+        /// The digest itself is built without any user context, so without this a broadcast to
+        /// "All" would reveal titles from restricted libraries to every recipient. Fails closed:
+        /// an item whose visibility check throws is left out.</summary>
+        public MediaNewsResult FilterForUser(User user)
+        {
+            var filtered = new MediaNewsResult();
+            if (user == null) return filtered;
+            for (var i = 0; i < Movies.Count; i++)
+                if (IsVisible(_movieItems[i], user)) filtered.AddMovie(Movies[i], _movieItems[i]);
+            for (var i = 0; i < Series.Count; i++)
+                if (IsVisible(_seriesItems[i], user)) filtered.AddSeries(Series[i], _seriesItems[i]);
+            for (var i = 0; i < Episodes.Count; i++)
+                if (IsVisible(_episodeItems[i], user)) filtered.AddEpisode(Episodes[i], _episodeItems[i]);
+            return filtered;
+        }
+
+        private static bool IsVisible(BaseItem item, User user)
+        {
+            try { return item != null && item.IsVisibleStandalone(user); }
+            catch { return false; }
+        }
     }
 
     public class MediaNewsSendResult
@@ -97,7 +133,7 @@ namespace EmbyCast.Plugin.Services
             }
             catch (Exception ex)
             {
-                _logger.Warn("EmbyCast: failed to enumerate libraries: {0}", ex.Message);
+                _logger.ErrorException("EmbyCast: failed to enumerate libraries.", ex);
                 return new List<LibraryOption>();
             }
         }
@@ -106,6 +142,10 @@ namespace EmbyCast.Plugin.Services
         /// is empty (e.g. never configured). Placeholders: see MediaNewsEpisodeTemplate on
         /// PluginConfiguration.</summary>
         public const string DefaultEpisodeTemplate = "{Series name (year)} - {SxxExx} - {Episode title}";
+
+        /// <summary>Upper bound for the lookback window, shared with EmbyCastApi's request
+        /// validation.</summary>
+        public const int MaxLookbackDays = 365;
 
         /// <summary>
         /// includeNewSeries and includeNewEpisodes are independent - either, both, or
@@ -119,18 +159,21 @@ namespace EmbyCast.Plugin.Services
             bool includeNewSeries, bool includeNewEpisodes, string episodeTemplate)
         {
             var result = new MediaNewsResult();
-            var cutoff = DateTimeOffset.UtcNow.AddDays(-Math.Max(1, days));
+            // Clamped on both ends: the API validates LookbackDays, but a hand-edited config (or
+            // any future caller) must never be able to push AddDays() out of DateTimeOffset's
+            // range, which throws instead of just returning an empty digest.
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-Math.Min(Math.Max(1, days), MaxLookbackDays));
             var libraryPaths = ResolveLibraryPaths(libraryManager, libraryIds);
 
             var movies = SafeQuery(libraryManager, "Movie", cutoff, libraryPaths);
             foreach (var item in movies)
-                result.Movies.Add(FormatTitle(item.Name, item.ProductionYear));
+                result.AddMovie(FormatTitle(item.Name, item.ProductionYear), item);
 
             if (includeNewSeries)
             {
                 var series = SafeQuery(libraryManager, "Series", cutoff, libraryPaths);
                 foreach (var item in series)
-                    result.Series.Add(FormatTitle(item.Name, item.ProductionYear));
+                    result.AddSeries(FormatTitle(item.Name, item.ProductionYear), item);
             }
 
             if (includeNewEpisodes)
@@ -138,7 +181,7 @@ namespace EmbyCast.Plugin.Services
                 var episodes = SafeQuery(libraryManager, "Episode", cutoff, libraryPaths);
                 var tpl = string.IsNullOrWhiteSpace(episodeTemplate) ? DefaultEpisodeTemplate : episodeTemplate;
                 foreach (var item in episodes)
-                    result.Episodes.Add(FormatEpisodeLine(item, tpl));
+                    result.AddEpisode(FormatEpisodeLine(item, tpl), item);
             }
 
             return result;
@@ -193,7 +236,7 @@ namespace EmbyCast.Plugin.Services
             }
             catch (Exception ex)
             {
-                _logger.Warn("EmbyCast: failed to resolve selected libraries to folder paths: {0}", ex.Message);
+                _logger.ErrorException("EmbyCast: failed to resolve selected libraries to folder paths.", ex);
             }
 
             foreach (var id in wanted)
@@ -217,28 +260,47 @@ namespace EmbyCast.Plugin.Services
             // libraries that no longer exist".
             if (libraryPaths == null || libraryPaths.Count == 0) return new List<BaseItem>();
 
-            List<BaseItem> items;
+            // Scoped to the selected libraries' folders server-side (PathStartsWithAny), so a
+            // long lookback on a big server no longer loads every recently added item of every
+            // library into memory just to throw most of them away. If the scoped query finds
+            // nothing - or the server rejects it - the old unscoped query runs as a fallback:
+            // how the server compares paths (separators, trailing slashes, network shares) can't
+            // be verified from here, and a silently empty digest is exactly the failure an
+            // earlier server-side filter attempt (TopParentIds, see class doc) produced. The
+            // in-memory IsUnderPath filter below stays authoritative either way.
+            List<BaseItem> items = null;
+            var usedFallback = false;
             try
             {
-                var query = new InternalItemsQuery
-                {
-                    IncludeItemTypes = new[] { itemType },
-                    Recursive = true,
-                    IsVirtualItem = false,
-                    MinDateCreated = cutoff,
-                    OrderBy = new[] { (ItemSortBy.DateCreated, SortOrder.Descending) }
-                };
-
-                items = libraryManager.GetItemList(query).ToList();
+                items = RunQuery(libraryManager, itemType, cutoff, libraryPaths.ToArray());
             }
             catch (Exception ex)
             {
-                _logger.Error("EmbyCast: media-news query for {0} failed: {1}", itemType, ex.Message);
-                return new List<BaseItem>();
+                _logger.ErrorException("EmbyCast: path-scoped media-news query for {0} failed; retrying unscoped.", ex, itemType);
             }
+
+            if (items == null || items.Count == 0)
+            {
+                try
+                {
+                    items = RunQuery(libraryManager, itemType, cutoff, null);
+                    usedFallback = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("EmbyCast: media-news query for {0} failed.", ex, itemType);
+                    return new List<BaseItem>();
+                }
+            }
+
+            if (items.Count >= MaxQueryItems)
+                _logger.Warn("EmbyCast: media-news {0} query hit the limit of {1} items - the oldest additions in the lookback window may be missing. Consider a shorter lookback.", itemType, MaxQueryItems);
 
             var filtered = items.Where(item => !string.IsNullOrEmpty(item.Path) &&
                 libraryPaths.Any(root => IsUnderPath(item.Path, root))).ToList();
+
+            if (usedFallback && filtered.Count > 0)
+                _logger.Warn("EmbyCast: media-news {0}: the server-side path filter matched nothing but the unscoped query found {1} item(s) in the selected libraries - using the unscoped query (slower on large libraries).", itemType, filtered.Count);
 
             // Diagnostic-only logging: helps tell apart "the server has no recently-added items
             // of this type at all" (matchedByDate low/zero) from "items exist but none matched a
@@ -251,6 +313,26 @@ namespace EmbyCast.Plugin.Services
                 itemType, items.Count, filtered.Count, string.Join(" | ", libraryPaths));
 
             return filtered;
+        }
+
+        /// <summary>Upper bound per item type and query. Newest first (DateCreated descending), so
+        /// if it's ever hit, only the oldest additions in the lookback window are cut - and a
+        /// digest with thousands of lines wouldn't be readable as a notification anyway.</summary>
+        private const int MaxQueryItems = 5000;
+
+        private static List<BaseItem> RunQuery(ILibraryManager libraryManager, string itemType, DateTimeOffset cutoff, string[] pathPrefixes)
+        {
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { itemType },
+                Recursive = true,
+                IsVirtualItem = false,
+                MinDateCreated = cutoff,
+                OrderBy = new[] { (ItemSortBy.DateCreated, SortOrder.Descending) },
+                Limit = MaxQueryItems
+            };
+            if (pathPrefixes != null) query.PathStartsWithAny = pathPrefixes;
+            return libraryManager.GetItemList(query).ToList();
         }
 
         private static bool IsUnderPath(string itemPath, string libraryRootPath)

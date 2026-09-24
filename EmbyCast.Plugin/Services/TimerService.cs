@@ -279,11 +279,36 @@ namespace EmbyCast.Plugin.Services
         /// previous process. A no-op if no timer is persisted, or if the persisted timer isn't
         /// Active - a pending/scheduled timer is instead picked up by the regular
         /// CheckPendingStart() poll once its start time arrives, same as if the server hadn't
-        /// restarted at all.</summary>
+        /// restarted at all.
+        ///
+        /// A timer whose countdown already ended while the server was down (or whose post-action
+        /// already ran - CompletedActionRan, e.g. a state left behind by an older plugin version
+        /// that only cleared Active after the action) is NOT resumed: it is deactivated without
+        /// sending the final message or running its post-action. Otherwise a RestartServer/
+        /// ShutdownServer timer would fire again immediately on every startup - the server
+        /// restarting/shutting down right after it comes back up, potentially in a loop.</summary>
         public void ResumeAfterRestart()
         {
             var state = _store.GetActiveTimer();
             if (state == null || !state.Active) return;
+
+            if (state.CompletedActionRan || DateTime.UtcNow >= state.EndUtc)
+            {
+                var skipped = false;
+                _store.UpdateActiveTimer(s =>
+                {
+                    if (s.Id != state.Id || !s.Active) return;
+                    s.Active = false;
+                    if (!s.CompletedActionRan)
+                        s.LastError = "Countdown ended while the server was offline - final message and post-timer action were skipped.";
+                    skipped = true;
+                });
+                if (skipped)
+                    _logger.Warn("EmbyCast: not resuming timer {0} after restart - its countdown already ended (at {1:u}) or its post-action already ran; final message and post-action ({2}) skipped.",
+                        state.Id, state.EndUtc, state.PostAction);
+                return;
+            }
+
             _logger.Info("EmbyCast: resuming an active timer job after restart (id {0}).", state.Id);
             LaunchRunLoop(state.Id);
         }
@@ -359,25 +384,40 @@ namespace EmbyCast.Plugin.Services
 
                 await SendFinalMessageAsync(finalState).ConfigureAwait(false);
 
-                if (!token.IsCancellationRequested)
+                if (token.IsCancellationRequested) return;
+
+                // Persist "completed" BEFORE running the post-action, not after: a
+                // RestartServer/ShutdownServer action tears the server down, and shutdown cancels
+                // this task's token (StopForShutdown) - so anything written after the action, and
+                // the finally block below, may never run. If Active were still true on disk at
+                // that point, ResumeAfterRestart would fire the action again on the next startup.
+                // Done as an atomic check-and-set under MessageStore's lock, so a CancelTimer()
+                // that landed in the meantime (Active already false) also stops the action here.
+                var claimed = false;
+                _store.UpdateActiveTimer(s =>
                 {
-                    var resultMessage = await PostTimerActionExecutor
-                        .ExecuteAsync(finalState.PostAction, _appHost, _logger)
-                        .ConfigureAwait(false);
-                    _store.UpdateActiveTimer(s =>
-                    {
-                        if (s.Id != timerId) return;
-                        s.CompletedActionRan = true;
-                        s.LastError = resultMessage;
-                    });
-                }
+                    if (s.Id != timerId || !s.Active) return;
+                    s.Active = false;
+                    s.CompletedActionRan = true;
+                    claimed = true;
+                });
+                if (!claimed) return;
+
+                var resultMessage = await PostTimerActionExecutor
+                    .ExecuteAsync(finalState.PostAction, _appHost, _logger)
+                    .ConfigureAwait(false);
+                _store.UpdateActiveTimer(s =>
+                {
+                    if (s.Id != timerId) return;
+                    s.LastError = resultMessage;
+                });
             }
             catch (Exception ex)
             {
-                _logger.Error("EmbyCast: timer loop failed: {0}", ex.Message);
+                _logger.ErrorException("EmbyCast: timer loop failed.", ex);
                 if (!token.IsCancellationRequested)
                 {
-                    _store.UpdateActiveTimer(s => { if (s.Id == timerId) s.LastError = ex.Message; });
+                    _store.UpdateActiveTimer(s => { if (s.Id == timerId) s.LastError = "Timer failed - see the Emby server log for details."; });
                 }
             }
             finally
