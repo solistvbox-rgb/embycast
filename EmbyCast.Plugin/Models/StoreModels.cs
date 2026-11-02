@@ -10,6 +10,18 @@ namespace EmbyCast.Plugin.Models
         public string Username { get; set; }
         public string Status { get; set; } // DeliveryStatus as string (serialization-friendly)
         public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
+        /// <summary>Optional machine-readable reason code for the status - currently only
+        /// <see cref="DeliveryNotes.UserDeleted"/>. The dashboard translates known codes for the
+        /// history badge's tooltip. Null (the usual case) is omitted from the store file.</summary>
+        public string Note { get; set; }
+    }
+
+    /// <summary>Reason codes for <see cref="DeliveryRecord.Note"/>.</summary>
+    public static class DeliveryNotes
+    {
+        /// <summary>The recipient's Emby account no longer exists (deleted), so the message
+        /// can never be delivered.</summary>
+        public const string UserDeleted = "UserDeleted";
     }
 
     /// <summary>A single row in "Status & History". Covers instant, scheduled, timer,
@@ -43,6 +55,30 @@ namespace EmbyCast.Plugin.Models
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Name { get; set; }
         public List<string> UserIds { get; set; } = new List<string>();
+    }
+
+    /// <summary>A System Message set up in the dashboard tile: which Emby notification events
+    /// (ids as listed by Emby's Notifications/Types, e.g. "scheduledtasks.completed") are shown
+    /// to which administrators, and how. Reported to Emby by SystemMessageNotifier.</summary>
+    public class SystemNotificationEntry
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Name { get; set; }
+        public bool Enabled { get; set; } = true;
+        /// <summary>"Toast" (short pop-up) or "Dialog".</summary>
+        public string DisplayMode { get; set; } = "Toast";
+        public List<string> EventIds { get; set; } = new List<string>();
+        /// <summary>Administrators who get it (normalized user ids). Checked against the
+        /// current admin list at send time, so a user who lost admin rights gets nothing.</summary>
+        public List<string> RecipientUserIds { get; set; } = new List<string>();
+        /// <summary>"Limit user events to": when true, events caused by a user are shown only
+        /// for the users in UserFilterIds or in one of the groups in UserFilterGroupIds (groups
+        /// resolved at event time, like for Instant Message). Events without a user - backups,
+        /// tasks, plugins - always pass. A separate flag instead of "empty list = all users", so removing the last
+        /// listed user (e.g. deleted in Emby) can never silently widen the entry to everyone.</summary>
+        public bool LimitUsers { get; set; }
+        public List<string> UserFilterIds { get; set; } = new List<string>();
+        public List<string> UserFilterGroupIds { get; set; } = new List<string>();
     }
 
     /// <summary>A message an admin scheduled for a future date/time.</summary>
@@ -79,10 +115,9 @@ namespace EmbyCast.Plugin.Models
         public string Text { get; set; }
         public int TimeoutMs { get; set; }
         public DateTime QueuedAtUtc { get; set; } = DateTime.UtcNow;
-        /// <summary>True if this message may only be delivered to a web-browser session (the
-        /// "Nur an Web-Browser-Sitzungen senden" option, currently offered only for Media
-        /// News). A login via a non-web client leaves the message queued rather than
-        /// delivering it - see MessageStore.TakePendingForUser.</summary>
+        /// <summary>True if this message may only be delivered to a web-browser session (Media
+        /// News "Send only to web-browser sessions"). A login via a non-web client leaves it
+        /// queued - see MessageStore.TakePendingForUser.</summary>
         public bool WebOnly { get; set; }
     }
 
@@ -149,6 +184,8 @@ namespace EmbyCast.Plugin.Models
         public HashSet<string> WelcomedUserIds { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Admin-defined named user groups - see UserGroup.</summary>
         public List<UserGroup> Groups { get; set; } = new List<UserGroup>();
+        /// <summary>System Message entries - see SystemNotificationEntry.</summary>
+        public List<SystemNotificationEntry> SystemNotifications { get; set; } = new List<SystemNotificationEntry>();
         /// <summary>When the "Mark existing users as already welcomed" button was last clicked
         /// (see MessageStore.MarkWelcomedBulk) - null if it has never been run. Overwritten on
         /// every run, including a run that marks zero new users (everyone was already marked) -

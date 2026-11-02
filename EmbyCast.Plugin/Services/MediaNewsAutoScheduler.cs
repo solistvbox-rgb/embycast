@@ -31,7 +31,7 @@ namespace EmbyCast.Plugin.Services
         private readonly MediaNewsService _mediaNews;
         private readonly DeliveryService _delivery;
         private readonly IServerApplicationHost _appHost;
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
 
         public MediaNewsAutoScheduler(
             Func<PluginConfiguration> getConfig,
@@ -46,7 +46,7 @@ namespace EmbyCast.Plugin.Services
             _mediaNews = mediaNews;
             _delivery = delivery;
             _appHost = appHost;
-            _logger = logManager.GetLogger(nameof(MediaNewsAutoScheduler));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(MediaNewsAutoScheduler)));
         }
 
         public async Task RunLoopAsync(CancellationToken token)
@@ -131,14 +131,10 @@ namespace EmbyCast.Plugin.Services
 
             if (libraryIds.Length == 0)
             {
-                // Distinct from the generic "nothing new" case below: this configuration can
-                // never produce anything to send, no matter how long it keeps running, which the
-                // dashboard's Save button now also blocks up front (see EmbyCastApi's
-                // SaveMediaNewsAutoConfig / config.js's "select at least one library" check) -
-                // this is a server-side backstop for configs saved before that check existed, or
-                // for direct API use. Skips unconditionally, ignoring MediaNewsSkipWhenEmpty,
-                // since sending "no news this week" weekly for a library selection that was never
-                // configured would be actively misleading.
+                // No library selected can never produce anything - the dashboard already refuses
+                // to save it; this is the server-side backstop (older configs, direct API use).
+                // Skips regardless of MediaNewsSkipWhenEmpty: a weekly "no news" for a selection
+                // that was never configured would be misleading.
                 _logger.Warn("EmbyCast: auto media-news is enabled but no library is selected in Media News settings - nothing will ever be sent until at least one library is checked. Skipping this run.");
                 return;
             }

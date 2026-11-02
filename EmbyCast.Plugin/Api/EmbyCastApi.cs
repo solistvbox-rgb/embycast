@@ -123,11 +123,10 @@ namespace EmbyCast.Plugin.Api
         public bool IncludeNewSeries { get; set; } = true;
         public bool IncludeNewEpisodes { get; set; } = false;
         public string EpisodeTemplate { get; set; }
-        /// <summary>"Nur an Web-Browser-Sitzungen senden" - see DeliveryService.IsWebSession.
-        /// Offered only for Media News (the message type long enough that non-web clients often
-        /// can't display it well). A user reachable only via a non-web active session falls
-        /// through to the offline queue instead of being skipped, so the message still arrives
-        /// once they open a browser - see DeliveryService.SendAsync.</summary>
+        /// <summary>"Send only to web-browser sessions" - see DeliveryService.IsWebSession.
+        /// Offered only for Media News (long messages non-web clients often display badly). A user
+        /// active only on a non-web client is kept for offline delivery instead of being skipped,
+        /// so the message arrives once they open a browser - see DeliveryService.SendAsync.</summary>
         public bool WebOnly { get; set; } = false;
     }
 
@@ -165,9 +164,8 @@ namespace EmbyCast.Plugin.Api
     {
         public bool Enabled { get; set; }
         /// <summary>Day/Hour/Minute here are UTC, same as PluginConfiguration.MediaNewsAutoSendDay
-        /// /Hour/Minute - the dashboard converts to/from the admin's local wall-clock time
-        /// client-side (see config.js's localDayTimeToUtc/utcDayTimeToLocal) purely for display
-        /// and input; nothing server-side ever deals in local time.</summary>
+        /// /Hour/Minute - the dashboard converts to/from the admin's local time (app.js
+        /// localDayTimeToUtc/utcDayTimeToLocal); nothing server-side deals in local time.</summary>
         public DayOfWeek Day { get; set; }
         public int Hour { get; set; }
         public int Minute { get; set; }
@@ -183,20 +181,15 @@ namespace EmbyCast.Plugin.Api
         /// <summary>"Active" | "All" | "Specific" - see PluginConfiguration.MediaNewsRecipientMode.</summary>
         public string RecipientMode { get; set; }
         public int LookbackDays { get; set; }
-        /// <summary>Echoes MediaNewsIncludeNewSeries/MediaNewsIncludeNewEpisodes, same reasoning
-        /// as Header/RecipientMode/LookbackDays above - lets the dashboard's saved-config
-        /// structure preview (see config.js's buildMediaNewsStructurePreviewText) know which
-        /// sections the SAVED auto-send job actually includes, without relying on the (possibly
-        /// different, unsaved) checkboxes currently sitting in the form above.</summary>
+        /// <summary>Echoes MediaNewsIncludeNewSeries/MediaNewsIncludeNewEpisodes so the
+        /// dashboard's preview of the SAVED auto-send job (app.js
+        /// buildMediaNewsStructurePreviewText) doesn't depend on unsaved form checkboxes.</summary>
         public bool IncludeNewSeries { get; set; }
         public bool IncludeNewEpisodes { get; set; }
-        /// <summary>True when at least one of the saved libraries (MediaNewsLibraryIdsCsv) is
-        /// typed "movies" or "mixed"/unset - i.e. could ever actually contribute a movie.
-        /// MediaNewsService.BuildSinceDays filters purely by folder path, not content type, so a
-        /// library typed "tvshows" can never contain a movie item and a "New Movies" section
-        /// would always end up empty (and therefore omitted) in the real send - see
-        /// config.js's buildMediaNewsStructurePreviewTextFromStatus, which uses this instead of
-        /// showing "New Movies" whenever ANY library at all is selected.</summary>
+        /// <summary>True when at least one saved library (MediaNewsLibraryIdsCsv) is typed
+        /// "movies" or "mixed"/unset, i.e. could contribute a movie. Lets the preview (app.js
+        /// buildMediaNewsStructurePreviewTextFromStatus) leave out "New Movies" when only TV
+        /// libraries are selected.</summary>
         public bool HasMovieLibrarySelected { get; set; }
         /// <summary>Same as HasMovieLibrarySelected above, but for series/episodes: true when at
         /// least one saved library is typed "tvshows" or "mixed"/unset. A library typed "movies"
@@ -209,11 +202,9 @@ namespace EmbyCast.Plugin.Api
         /// SAVED job is web-browser-only, without relying on the (possibly different, unsaved)
         /// "Send only to web-browser sessions" checkbox currently sitting in the form above.</summary>
         public bool WebOnly { get; set; }
-        /// <summary>Set (only) when Post(SaveMediaNewsAutoConfig) rejects the request - e.g.
-        /// Header or EpisodeTemplate over their length limit - instead of persisting anything.
-        /// Still a normal 200 response, same "Error field, not a thrown HTTP error" convention
-        /// used throughout this file (see SendResultDto.Error) - config.js's .medianews-auto-save
-        /// handler checks this before treating the response as a successful save.</summary>
+        /// <summary>Set only when Post(SaveMediaNewsAutoConfig) rejects the request (e.g. Header
+        /// or EpisodeTemplate too long) - nothing is saved then. Still a 200 response, like every
+        /// "Error" field in this file.</summary>
         public string Error { get; set; }
     }
 
@@ -288,10 +279,7 @@ namespace EmbyCast.Plugin.Api
         public List<string> UserIds { get; set; } = new List<string>();
     }
 
-    // POST rather than PUT: every other write endpoint in this plugin already uses POST
-    // (there's no prior PUT usage anywhere in this codebase to follow), and this sandbox has no
-    // compiler to verify a first-time verb against this Emby SDK version - staying with a
-    // proven-working verb removes that risk for no real cost.
+    // POST rather than PUT, like every other write endpoint of this plugin.
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/Groups/{Id}", "POST", Summary = "Rename a user group and/or replace its member list")]
     public class UpdateGroup : IReturn<UserGroup>
@@ -308,17 +296,53 @@ namespace EmbyCast.Plugin.Api
         public string Id { get; set; }
     }
 
+    // ---- System Message -------------------------------------------------------
+
+    public class SystemMessagesDto
+    {
+        public List<SystemNotificationEntry> Entries { get; set; } = new List<SystemNotificationEntry>();
+        /// <summary>Administrators that can be chosen as recipients.</summary>
+        public List<UserOptionDto> Administrators { get; set; } = new List<UserOptionDto>();
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/SystemMessages", "GET", Summary = "List System Message entries and the administrators that can receive them")]
+    public class GetSystemMessages : IReturn<SystemMessagesDto> { }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/SystemMessages", "POST", Summary = "Create (no Id) or update a System Message entry")]
+    public class SaveSystemMessage : IReturn<object>
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public bool Enabled { get; set; } = true;
+        public string DisplayMode { get; set; }
+        public List<string> EventIds { get; set; } = new List<string>();
+        public List<string> RecipientUserIds { get; set; } = new List<string>();
+        public bool LimitUsers { get; set; }
+        public List<string> UserFilterIds { get; set; } = new List<string>();
+        public List<string> UserFilterGroupIds { get; set; } = new List<string>();
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/SystemMessages/{Id}", "DELETE", Summary = "Delete a System Message entry")]
+    public class DeleteSystemMessage : IReturn<object>
+    {
+        public string Id { get; set; }
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/SystemMessages/{Id}/Test", "POST", Summary = "Send a test System Message to the entry's administrators")]
+    public class TestSystemMessage : IReturn<object>
+    {
+        public string Id { get; set; }
+    }
+
     // ---- Welcome message: save Enabled/Header/Text ------------------------
 
-    /// <summary>Added 2026-09-07 so Header/Text can be length-validated server-side (rejecting an
-    /// over-long Header, truncating an over-long Text) the same way every other message type
-    /// already is. Previously Welcome's Enabled/Header/Text were saved via Emby's own generic
-    /// ApiClient.updatePluginConfiguration() (the whole PluginConfiguration blob at once) - there
-    /// is no per-field validation hook available on that generic path without overriding an
-    /// unverified BasePlugin SDK member (no compiler in this project to check such an override
-    /// against this Emby SDK version - see MediaNewsService.cs's doc comment on the same
-    /// caution), so this dedicated endpoint exists instead, mirroring the same pattern
-    /// SaveMediaNewsAutoConfig already uses for its own PluginConfiguration fields.</summary>
+    /// <summary>Saves the Welcome message fields with server-side length validation (too long
+    /// Header rejected, too long Text truncated) - Emby's generic updatePluginConfiguration() has
+    /// no per-field validation and would overwrite the whole configuration.</summary>
     [Authenticated(Roles = "Admin")]
     [Route("/EmbyCast/Welcome/Save", "POST", Summary = "Save the welcome message (enabled/header/text)")]
     public class SaveWelcomeMessage : IReturn<WelcomeMessageDto>
@@ -326,13 +350,9 @@ namespace EmbyCast.Plugin.Api
         public bool Enabled { get; set; }
         public string Header { get; set; }
         public string Text { get; set; }
-        /// <summary>Piggybacks PluginConfiguration.Language along for the ride, same as the
-        /// generic updatePluginConfiguration() call this replaces used to (see saveWelcomeConfig
-        /// in config.js) - this is the only place in the dashboard that ever persisted it, since
-        /// the weekly Media News auto-send job (MediaNewsAutoScheduler) reads it server-side to
-        /// pick a language with no live browser request to ask. Preserved here unchanged rather
-        /// than fixed/moved, to avoid an unrelated behavior change while only asked for length
-        /// limits and date/time locale.</summary>
+        /// <summary>Also stores PluginConfiguration.Language (the only place the dashboard saves
+        /// it): the weekly Media News auto-send reads it server-side to pick the message
+        /// language.</summary>
         public string Language { get; set; }
     }
 
@@ -403,6 +423,31 @@ namespace EmbyCast.Plugin.Api
     public class PluginVersionDto
     {
         public string Version { get; set; }
+        /// <summary>Version of the dashboard shell (config.html + config.js) this plugin build
+        /// expects - see EmbyCastApi.ShellVersion. The shell compares it with its own
+        /// SHELL_VERSION and asks the admin to clear the browser cache if it is older.</summary>
+        public int ShellVersion { get; set; }
+    }
+
+    // ---- Dashboard content behind the stable shell -------------------------------
+    // config.html/config.js are only a loader shell (see their header comments): Emby caches plugin
+    // pages under a URL that carries only the SERVER version, so browsers kept running stale
+    // dashboards after plugin updates. The shell fetches the real markup and controller from these
+    // two endpoints with ?v=<plugin version>, i.e. a new URL for every plugin version. V is not
+    // read by the server - it only makes each version's URL unique.
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Client/Page", "GET", Summary = "Dashboard markup (app.html) for the config page shell")]
+    public class GetClientPage : IReturn<object>
+    {
+        public string V { get; set; }
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Client/Script", "GET", Summary = "Dashboard controller (app.js) for the config page shell")]
+    public class GetClientScript : IReturn<object>
+    {
+        public string V { get; set; }
     }
 
     public class StatsDto
@@ -412,7 +457,7 @@ namespace EmbyCast.Plugin.Api
         public bool TimerActive { get; set; }
     }
 
-    // ---- "Geplante Reinigung" ----------------------------------------------
+    // ---- Scheduled Cleanup ----------------------------------------------------
 
     public class CleanupStatsDto
     {
@@ -443,6 +488,7 @@ namespace EmbyCast.Plugin.Api
         public bool IncludeMediaNews { get; set; } = true;
         public bool IncludeWelcome { get; set; } = true;
         public bool IncludeOffline { get; set; } = true;
+        public bool IncludeSystem { get; set; } = true;
     }
 
     // ---- Targeted settings writes -------------------------------------------
@@ -465,6 +511,7 @@ namespace EmbyCast.Plugin.Api
         public bool IncludeMediaNews { get; set; } = true;
         public bool IncludeWelcome { get; set; } = true;
         public bool IncludeOffline { get; set; } = true;
+        public bool IncludeSystem { get; set; } = true;
     }
 
     [Authenticated(Roles = "Admin")]
@@ -481,6 +528,28 @@ namespace EmbyCast.Plugin.Api
         public string TileOrderCsv { get; set; }
     }
 
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Settings", "POST", Summary = "Save the Settings tile (log level, offline delivery)")]
+    public class SaveSettings : IReturn<object>
+    {
+        /// <summary>Nothing | ErrorsOnly | ErrorsAndWarnings | Verbose - see EmbyCastLogLevels.</summary>
+        public string LogLevel { get; set; }
+        public bool OfflineDeliveryEnabled { get; set; } = true;
+        /// <summary>Default | Accent | Neutral | Pastel. Null keeps the saved value.</summary>
+        public string TileColorScheme { get; set; }
+        /// <summary>Tiles changed on top of the scheme. Null keeps the saved value.</summary>
+        public List<TileColorDto> TileColors { get; set; }
+        /// <summary>"Offer beta versions". Null keeps the saved value.</summary>
+        public bool? IncludePreReleases { get; set; }
+    }
+
+    public class TileColorDto
+    {
+        public string Key { get; set; }
+        /// <summary>"#rrggbb"</summary>
+        public string Color { get; set; }
+    }
+
     // =====================================================================
     // Service implementation
     //
@@ -495,31 +564,18 @@ namespace EmbyCast.Plugin.Api
     {
         public IRequest Request { get; set; }
 
-        // Bare "Plugin" resolves to EmbyCast.Plugin.Plugin here (same pattern
-        // used by the EmbyNotify/EmbyWeeklyDigest reference plugins, whose Api classes live in
-        // an "...Api" sub-namespace of the "...Plugin" namespace that declares the Plugin class).
+        // Bare "Plugin" resolves to EmbyCast.Plugin.Plugin here (this class lives in the
+        // EmbyCast.Plugin.Api sub-namespace).
         private static Plugin P => Plugin.Instance;
 
-        // ---- Text length limits (added 2026-09-07 per admin request) ----------------------
-        // Header fields are short, single-line identifiers rendered as the bold title of a
-        // toast notification - a value over this length is REJECTED outright (not silently
-        // truncated), since cutting a header off mid-word would look broken in a live
-        // notification and a header is short/identifying enough that losing part of it changes
-        // its meaning. Message body fields are free-form content - truncated SILENTLY instead,
-        // since losing the tail of an over-long paste is a much smaller admin-facing surprise
-        // than an outright rejected send for what's usually a one-off broadcast the admin wants
-        // to go out now. Episode Template and Group Name are short structured/identifier
-        // fields - the template contains placeholder tokens like {SxxExx} that a silent
-        // truncation could cut mid-token, and a truncated group name could leave an admin
-        // looking at a group they no longer recognize - both rejected outright, same reasoning
-        // as Header. These are intentionally simple length checks in this API layer (not on the
-        // storage models themselves), matching this file's existing "reject via an Error field
-        // on the response, still HTTP 200" convention (see e.g. MediaNewsSendResult.Error)
-        // rather than throwing an SDK HttpError type this project has no compiler to verify
-        // against - see MediaNewsService.cs's own doc comment on avoiding unverified SDK
-        // internals for why that caution exists here.
+        // ---- Text length limits ---------------------------------------------------------
+        // Headers, the episode template and group names are short identifiers: too long values
+        // are REJECTED (a cut-off header looks broken, a cut template could break a {token}).
+        // Message texts are free-form: too long values are silently TRUNCATED rather than
+        // blocking a broadcast. Rejections use this file's "Error field, still HTTP 200"
+        // convention (see e.g. MediaNewsSendResult.Error).
         private const int MaxHeaderLength = 80;
-        private const int MaxMessageTextLength = 500;
+        internal const int MaxMessageTextLength = 500;
         private const int MaxEpisodeTemplateLength = 200;
         private const int MaxGroupNameLength = 80;
 
@@ -639,8 +695,8 @@ namespace EmbyCast.Plugin.Api
         public object Get(GetScheduled request) => P.Store.GetScheduled();
 
         // Returns null (200 OK, empty body) if the message no longer exists - e.g. it already
-        // fired or was cancelled from another tab in the meantime - same "not found" contract as
-        // Post(UpdateGroup); config.js's .scheduled-create handler checks for this explicitly.
+        // fired or was cancelled from another tab - same "not found" contract as
+        // Post(UpdateGroup); the dashboard's .scheduled-create handler checks for this.
         public object Post(UpdateScheduled request)
         {
             if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
@@ -665,16 +721,10 @@ namespace EmbyCast.Plugin.Api
 
         public object Post(StartTimer request)
         {
-            // The single-timer slot may already be occupied (actively counting down, or
-            // scheduled/pending) - per the admin's explicit request, a new Start/Schedule attempt
-            // in that case is blocked with a clear message instead of silently cancelling and
-            // replacing whatever already exists. Checked here as a fast, friendly pre-check (so
-            // the common case never even reaches TimerService), but TimerService.StartTimer/
-            // ScheduleTimer are what actually enforce this atomically (see
-            // MessageStore.TryClaimTimerSlot) - the InvalidOperationException catch below handles
-            // the rare race this pre-check alone can't close (two near-simultaneous requests both
-            // passing this check before either has claimed the slot), so that race also gets the
-            // same friendly response instead of an unhandled-exception error.
+            // Only one timer at a time: a new Start/Schedule is refused with a clear message
+            // instead of replacing a running or pending one. This is a quick pre-check; the
+            // atomic check is MessageStore.TryClaimTimerSlot (via TimerService), and the
+            // InvalidOperationException catch below covers two near-simultaneous requests.
             if (!string.IsNullOrEmpty(request.Header) && request.Header.Length > MaxHeaderLength)
                 return new { Error = HeaderTooLongError };
 
@@ -766,13 +816,8 @@ namespace EmbyCast.Plugin.Api
             if (digest.IsEmpty)
             {
                 result.Skipped = true;
-                // No library checked at all is a distinct, more common cause of an empty digest
-                // than "nothing new was added" - give a clearer message for it instead of the
-                // generic one, same idea as the "select at least one user" guard used for
-                // RecipientMode.Specific elsewhere in this plugin. NoLibrarySelected additionally
-                // lets the dashboard show this specific case as an error (red, actionable mistake)
-                // while the "nothing new" case stays informational (green) - see config.js's
-                // ".medianews-send" click handler.
+                // "No library selected" gets its own message (shown red in the dashboard as an
+                // actionable mistake), separate from the informational "nothing new" case.
                 result.NoLibrarySelected = request.LibraryIds == null || request.LibraryIds.Count == 0;
                 result.Message = result.NoLibrarySelected
                     ? (request.Language == "de"
@@ -973,18 +1018,11 @@ namespace EmbyCast.Plugin.Api
             };
         }
 
-        /// <summary>Shared by Get(GetMediaNewsAutoStatus)/Post(SaveMediaNewsAutoConfig). Resolves
-        /// which content categories the saved library selection could ever actually contribute,
-        /// mirroring MediaNewsService.BuildSinceDays's real filtering closely enough for preview
-        /// purposes: that method filters purely by folder PATH, not by a library's configured
-        /// content type, so a library typed "movies" can never yield a Series/Episode item (and
-        /// vice versa) while a "mixed"/unset-type library could contain either. Used only to
-        /// steer the dashboard's structural auto-send preview (see MediaNewsAutoStatusDto's
-        /// HasMovieLibrarySelected/HasSeriesLibrarySelected doc comments and config.js's
-        /// buildMediaNewsStructurePreviewTextFromStatus) - never affects the real send itself.
-        /// Returns (false, false) when the CSV is empty/blank, when the library manager can't be
-        /// resolved, or when none of the saved ids match a currently-known library (e.g.
-        /// deleted/recreated since it was selected).</summary>
+        /// <summary>Which content categories (movies / series) the saved library selection can
+        /// contribute, by library content type ("mixed"/unset counts for both). Only used for the
+        /// dashboard's auto-send preview, never for the real send. Returns (false, false) when
+        /// nothing is selected, the library manager is unavailable or no saved id still matches a
+        /// library.</summary>
         private static (bool HasMovieLibrary, bool HasSeriesLibrary) ResolveMediaNewsLibraryTypeFlags(string libraryIdsCsv)
         {
             if (string.IsNullOrWhiteSpace(libraryIdsCsv))
@@ -1086,6 +1124,98 @@ namespace EmbyCast.Plugin.Api
         {
             var ok = P.Store.DeleteGroup(request.Id);
             return new { Success = ok };
+        }
+
+        // ---- System Message -------------------------------------------------------
+
+        private const int MaxSystemEventIds = 100;
+        private const int MaxEventIdLength = 100;
+
+        private List<UserOptionDto> GetAdministrators() =>
+            UserLookup.GetAllUsers(P.ApplicationHost.Resolve<IUserManager>())
+                .Where(u => u.Policy != null && u.Policy.IsAdministrator)
+                .Select(u => new UserOptionDto { Id = IdNormalization.Normalize(u.Id), Name = u.Name })
+                .OrderBy(u => u.Name)
+                .ToList();
+
+        public object Get(GetSystemMessages request) => new SystemMessagesDto
+        {
+            Entries = P.Store.GetSystemNotifications(),
+            Administrators = GetAdministrators()
+        };
+
+        public object Post(SaveSystemMessage request)
+        {
+            var name = (request.Name ?? "").Trim();
+            if (name.Length == 0) return new { Error = "Name is required." };
+            if (name.Length > MaxGroupNameLength) return new { Error = $"Name must be {MaxGroupNameLength} characters or fewer." };
+
+            string displayMode;
+            if (string.Equals(request.DisplayMode, SystemMessageService.DisplayDialog, StringComparison.OrdinalIgnoreCase)) displayMode = SystemMessageService.DisplayDialog;
+            else if (string.Equals(request.DisplayMode, SystemMessageService.DisplayToast, StringComparison.OrdinalIgnoreCase)) displayMode = SystemMessageService.DisplayToast;
+            else return new { Error = "Display must be Toast or Dialog." };
+
+            var eventIds = (request.EventIds ?? new List<string>())
+                .Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim())
+                .Where(e => !SystemMessageService.HiddenEventIds.Contains(e))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (eventIds.Count == 0) return new { Error = "Select at least one event." };
+            if (eventIds.Count > MaxSystemEventIds || eventIds.Any(e => e.Length > MaxEventIdLength))
+                return new { Error = "Invalid event selection." };
+
+            var admins = new HashSet<string>(GetAdministrators().Select(a => a.Id), StringComparer.OrdinalIgnoreCase);
+            var recipients = (request.RecipientUserIds ?? new List<string>())
+                .Select(IdNormalization.Normalize)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (recipients.Count == 0) return new { Error = "Select at least one administrator." };
+            if (recipients.Any(id => !admins.Contains(id))) return new { Error = "Only administrators can receive System Messages." };
+
+            var knownUsers = new HashSet<string>(
+                UserLookup.GetAllUsers(P.ApplicationHost.Resolve<IUserManager>()).Select(u => IdNormalization.Normalize(u.Id)),
+                StringComparer.OrdinalIgnoreCase);
+            var userFilter = (request.UserFilterIds ?? new List<string>())
+                .Select(IdNormalization.Normalize)
+                .Where(id => !string.IsNullOrEmpty(id) && knownUsers.Contains(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var knownGroups = new HashSet<string>(P.Store.GetGroups().Select(g => g.Id), StringComparer.OrdinalIgnoreCase);
+            var groupFilter = (request.UserFilterGroupIds ?? new List<string>())
+                .Where(id => !string.IsNullOrEmpty(id) && knownGroups.Contains(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (request.LimitUsers && userFilter.Count == 0 && groupFilter.Count == 0)
+                return new { Error = "Select at least one user or group to limit the user events to." };
+
+            var saved = P.Store.SaveSystemNotification(new SystemNotificationEntry
+            {
+                Id = request.Id,
+                Name = name,
+                Enabled = request.Enabled,
+                DisplayMode = displayMode,
+                EventIds = eventIds,
+                RecipientUserIds = recipients,
+                LimitUsers = request.LimitUsers,
+                UserFilterIds = request.LimitUsers ? userFilter : new List<string>(),
+                UserFilterGroupIds = request.LimitUsers ? groupFilter : new List<string>()
+            });
+            return new { Success = true, Entry = saved };
+        }
+
+        public object Delete(DeleteSystemMessage request) => new { Success = P.Store.DeleteSystemNotification(request.Id) };
+
+        public async Task<object> Post(TestSystemMessage request)
+        {
+            var entry = P.Store.GetSystemNotification(request.Id);
+            if (entry == null) return new { Error = "System Message not found." };
+
+            var german = string.Equals(P.Configuration.Language, "de", StringComparison.OrdinalIgnoreCase);
+            var title = german ? "EmbyCast-Test" : "EmbyCast test";
+            var description = german
+                ? $"Test der System Message „{entry.Name}“ - so sieht sie aus."
+                : $"Test of the System Message \"{entry.Name}\" - this is how it looks.";
+
+            var outcome = await P.SystemMessages.DeliverAsync(entry, title, "", description, null).ConfigureAwait(false);
+            if (outcome.Error != null) return new { Error = outcome.Error };
+            return new { Success = true, Delivered = outcome.Delivered };
         }
 
         // ---- Welcome message: save Enabled/Header/Text ------------------------
@@ -1215,9 +1345,8 @@ namespace EmbyCast.Plugin.Api
             return new { Success = true, Count = count };
         }
 
-        // Same limits the dashboard enforces client-side (see config.js's .cleanup-save
-        // handler) - re-checked here so a direct API call can't store values the cleanup pass
-        // would misbehave with.
+        // Same limits the dashboard enforces - re-checked so a direct API call can't store values
+        // the cleanup pass would misbehave with.
         private const int MinHistoryMaxEntries = 20;
         private const int MaxHistoryMaxEntries = 5000;
 
@@ -1241,6 +1370,7 @@ namespace EmbyCast.Plugin.Api
                 c.HistoryCleanupIncludeMediaNews = request.IncludeMediaNews;
                 c.HistoryCleanupIncludeWelcome = request.IncludeWelcome;
                 c.HistoryCleanupIncludeOffline = request.IncludeOffline;
+                c.HistoryCleanupIncludeSystem = request.IncludeSystem;
             });
             return new { Success = true };
         }
@@ -1257,6 +1387,59 @@ namespace EmbyCast.Plugin.Api
             return new { Success = true };
         }
 
+        public object Post(SaveSettings request)
+        {
+            if (!EmbyCastLogLevels.IsValid(request.LogLevel))
+                return new { Success = false, Error = $"Unknown log level '{request.LogLevel}'." };
+
+            var level = EmbyCastLogLevels.Normalize(request.LogLevel);
+
+            string scheme = null;
+            if (request.TileColorScheme != null)
+            {
+                scheme = TileColorSchemes.FirstOrDefault(s => string.Equals(s, request.TileColorScheme, StringComparison.OrdinalIgnoreCase));
+                if (scheme == null) return new { Success = false, Error = $"Unknown tile colour scheme '{request.TileColorScheme}'." };
+            }
+
+            string colorsCsv = null;
+            if (request.TileColors != null)
+            {
+                var colors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in request.TileColors)
+                {
+                    if (item == null || !TileKeys.Contains(item.Key ?? "") || !IsHexColor(item.Color))
+                        return new { Success = false, Error = "Invalid tile colour." };
+                    colors[item.Key.ToLowerInvariant()] = item.Color.ToLowerInvariant();
+                }
+                colorsCsv = string.Join(",", colors.Select(kv => kv.Key + "=" + kv.Value));
+            }
+
+            P.MutateConfiguration(c =>
+            {
+                c.LogLevel = level;
+                c.OfflineDeliveryEnabled = request.OfflineDeliveryEnabled;
+                if (scheme != null) c.TileColorScheme = scheme;
+                if (colorsCsv != null) c.TileColorsCsv = colorsCsv;
+                if (request.IncludePreReleases.HasValue) c.IncludePreReleases = request.IncludePreReleases.Value;
+            });
+            // The update check caches per channel, but a fresh check right after switching is
+            // what the admin expects.
+            if (request.IncludePreReleases.HasValue) UpdateChecker.InvalidateCache();
+            return new { Success = true, LogLevel = level, OfflineDeliveryEnabled = request.OfflineDeliveryEnabled };
+        }
+
+        private static readonly string[] TileColorSchemes = { "Default", "Accent", "Neutral", "Pastel" };
+
+        /// <summary>The dashboard's tile keys (TILE_KEYS in app.js).</summary>
+        private static readonly HashSet<string> TileKeys = new HashSet<string>(new[]
+        {
+            "updates", "instant", "scheduled", "timer", "medianews", "welcome",
+            "groups", "history", "cleanup", "settings", "system"
+        }, StringComparer.OrdinalIgnoreCase);
+
+        private static bool IsHexColor(string value) =>
+            value != null && value.Length == 7 && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit);
+
         private static HashSet<MessageOrigin> ToIncludedTypes(PurgeHistoryNow request)
         {
             var includedTypes = new HashSet<MessageOrigin>();
@@ -1266,6 +1449,7 @@ namespace EmbyCast.Plugin.Api
             if (request.IncludeMediaNews) includedTypes.Add(MessageOrigin.MediaNews);
             if (request.IncludeWelcome) includedTypes.Add(MessageOrigin.Welcome);
             if (request.IncludeOffline) includedTypes.Add(MessageOrigin.Offline);
+            if (request.IncludeSystem) includedTypes.Add(MessageOrigin.System);
             return includedTypes;
         }
 
@@ -1275,22 +1459,81 @@ namespace EmbyCast.Plugin.Api
             return await UpdateChecker.CheckAsync().ConfigureAwait(false);
         }
 
-        // Deliberately does NOT call InvalidateCache() - unlike Post(CheckUpdate) above, this is
-        // hit unprompted on every single dashboard page load (silentCheckForUpdateBadge() in
-        // config.js) purely to drive the "Plugin Updates" tile's dot badge. Before this route
-        // existed, that silent check reused POST CheckUpdate and busted the cache on every page
-        // load, which meant UpdateChecker.CacheTtl never actually reduced GitHub API traffic no
-        // matter how high it was set - defeating the point of raising it from 1 hour to 7 days.
+        // Deliberately does NOT call InvalidateCache(): called on every dashboard page load
+        // (app.js silentCheckForUpdateBadge) for the tile's dot badge, so it must use the cache
+        // (UpdateChecker.CacheTtl) instead of hitting GitHub each time.
         public async Task<object> Get(GetCachedUpdateCheck request)
         {
             return await UpdateChecker.CheckAsync().ConfigureAwait(false);
         }
 
-        // Deliberately does NOT go through UpdateChecker.CheckAsync()/its cache - this must
-        // always reflect the assembly actually loaded right now, with no GitHub round-trip and no
-        // 1-hour cache, since it's polled on every dashboard page load to detect browser-side
-        // staleness (see GetPluginVersion above and checkForStaleClientAndReload() in config.js).
-        public object Get(GetPluginVersion request) => new PluginVersionDto { Version = UpdateChecker.GetCurrentVersion() };
+        // Deliberately not via UpdateChecker.CheckAsync()/its cache: must always report the
+        // assembly loaded right now - the dashboard shell (config.js) uses it to load the matching
+        // app.html/app.js and to detect an outdated shell.
+        public object Get(GetPluginVersion request) => new PluginVersionDto
+        {
+            Version = UpdateChecker.GetCurrentVersion(),
+            ShellVersion = ShellVersion
+        };
+
+        /// <summary>Must match SHELL_VERSION in Configuration/Web/config.js. Bump both together
+        /// whenever config.html or config.js change - see the header comment in config.js.</summary>
+        private const int ShellVersion = 1;
+
+        public object Get(GetClientPage request) => EmbeddedClientFile("app.html", "text/html; charset=utf-8");
+
+        public object Get(GetClientScript request) => EmbeddedClientFile("app.js", "application/javascript; charset=utf-8");
+
+        /// <summary>Serves a dashboard file (app.html / app.js) embedded in the plugin assembly.
+        /// no-store as an extra safeguard - the versioned URL already prevents stale copies, and
+        /// the shell requests these only once per page visit.</summary>
+        private object EmbeddedClientFile(string fileName, string contentType)
+        {
+            var bytes = ClientFileCache.GetOrAdd(fileName, LoadClientFile);
+            var resultFactory = P.ApplicationHost.Resolve<IHttpResultFactory>();
+            return resultFactory.GetResult(Request, new System.IO.MemoryStream(bytes, false), contentType, new Dictionary<string, string>
+            {
+                ["Cache-Control"] = "no-store"
+            });
+        }
+
+        /// <summary>Decompressed dashboard files, loaded once per plugin load (the content can
+        /// only change with a new DLL, which needs a server restart anyway).</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> ClientFileCache =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>(StringComparer.Ordinal);
+
+        /// <summary>The build embeds app.html/app.js gzip-compressed as "&lt;name&gt;.gz" (see the
+        /// EmbedCompressedDashboard target in EmbyCast.Plugin.csproj) to keep the DLL small; a
+        /// plain resource is used as fallback if a build ever embeds them uncompressed.</summary>
+        private static byte[] LoadClientFile(string fileName)
+        {
+            var assembly = typeof(Plugin).Assembly;
+            var resourceName = typeof(Plugin).Namespace + ".Configuration.Web." + fileName;
+
+            using (var compressed = assembly.GetManifestResourceStream(resourceName + ".gz"))
+            {
+                if (compressed != null)
+                {
+                    using (var gzip = new System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionMode.Decompress))
+                    using (var buffer = new System.IO.MemoryStream())
+                    {
+                        gzip.CopyTo(buffer);
+                        return buffer.ToArray();
+                    }
+                }
+            }
+
+            using (var plain = assembly.GetManifestResourceStream(resourceName))
+            {
+                if (plain == null)
+                    throw new System.IO.FileNotFoundException("Embedded dashboard resource not found: " + resourceName + "(.gz)");
+                using (var buffer = new System.IO.MemoryStream())
+                {
+                    plain.CopyTo(buffer);
+                    return buffer.ToArray();
+                }
+            }
+        }
 
         public async Task<object> Post(InstallUpdate request)
         {

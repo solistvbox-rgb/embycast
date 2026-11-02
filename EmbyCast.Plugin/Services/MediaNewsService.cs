@@ -79,9 +79,8 @@ namespace EmbyCast.Plugin.Services
         public bool Skipped { get; set; }
         /// <summary>True only when Skipped is also true AND the specific reason was "no library
         /// selected" (as opposed to "no new media found in the selected period, in an otherwise
-        /// valid library selection"). Lets the dashboard show this particular case as an error
-        /// (red) while still showing the "nothing new" case as informational (green) - see
-        /// config.js's ".medianews-send" click handler.</summary>
+        /// valid library selection"). Lets the dashboard show this case as an error (red) and
+        /// "nothing new" as informational (green).</summary>
         public bool NoLibrarySelected { get; set; }
         public int MovieCount { get; set; }
         public int SeriesCount { get; set; }
@@ -93,33 +92,21 @@ namespace EmbyCast.Plugin.Services
 
     /// <summary>
     /// Scans the library for items added in the last N days and formats/sends a "what's new"
-    /// broadcast. Built on the same InternalItemsQuery approach the reference
-    /// EmbyWeeklyDigest plugin uses (MinDateCreated + Recursive + IsVirtualItem=false).
+    /// broadcast (InternalItemsQuery with MinDateCreated + Recursive + IsVirtualItem=false).
     ///
-    /// Library scoping: an earlier version of this class tried to filter server-side via
-    /// InternalItemsQuery.TopParentIds, resolving each selected library's Guid (as exposed by
-    /// VirtualFolderInfo.ItemId) to a BaseItem via GetItemById() and reading its InternalId.
-    /// That resolution turned out to silently fail against a real server (GetItemById either
-    /// didn't resolve the id or threw), which made ResolveLibraryInternalIds() return an empty
-    /// set every time - and an empty/null TopParentIds was (by design, to fail open rather than
-    /// send nothing) treated as "no library filter", so library selection had no effect at all
-    /// regardless of what was checked or unchecked. Confirmed by user report: selecting only one
-    /// library still showed items from others, and selecting several had no visible effect.
-    ///
-    /// Fixed by dropping TopParentIds entirely and instead filtering in-memory by filesystem
-    /// path: VirtualFolderInfo.Locations gives each library's real folder path(s), and every
-    /// BaseItem has a Path under one of its library's Locations - so after running the same
-    /// unscoped query the reference plugin uses, results are kept only if their Path starts with
-    /// one of the selected libraries' folder paths. No internal id / Guid resolution involved,
-    /// so there is nothing here that depends on unverified SDK internals.
+    /// Library scoping is done in memory by filesystem path: VirtualFolderInfo.Locations gives
+    /// each library's folder path(s), and an item is kept only if its Path starts with one of the
+    /// selected libraries' paths. Filtering via InternalItemsQuery.TopParentIds did not work
+    /// reliably (resolving library ids to internal ids failed silently, which disabled the
+    /// filter altogether).
     /// </summary>
     public class MediaNewsService
     {
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
 
         public MediaNewsService(ILogManager logManager)
         {
-            _logger = logManager.GetLogger(nameof(MediaNewsService));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(MediaNewsService)));
         }
 
         public List<LibraryOption> GetLibraries(ILibraryManager libraryManager)
@@ -195,12 +182,9 @@ namespace EmbyCast.Plugin.Services
         /// is a plain string comparison with nothing SDK-version-sensitive in it. Ids that don't
         /// match any current library are skipped (logged), not treated as a hard error.
         ///
-        /// No libraries selected (libraryIds null/empty) deliberately resolves to an empty path
-        /// list, not "no filter" - per explicit user decision, an empty checkbox selection means
-        /// "nothing chosen", consistent with how "Specific users" recipient mode elsewhere in
-        /// this plugin already refuses to send to nobody rather than silently defaulting to
-        /// everyone. SafeQuery() below then correctly produces an empty (skipped) digest for
-        /// that case instead of announcing every library.
+        /// No libraries selected deliberately resolves to an empty path list, not "no filter":
+        /// an empty selection means "nothing chosen", so SafeQuery() produces an empty (skipped)
+        /// digest instead of announcing every library.
         /// </summary>
         private List<string> ResolveLibraryPaths(ILibraryManager libraryManager, IReadOnlyCollection<string> libraryIds)
         {

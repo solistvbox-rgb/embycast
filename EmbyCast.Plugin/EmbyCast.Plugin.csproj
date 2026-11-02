@@ -5,11 +5,10 @@
     - Emby Server plugins MUST target netstandard2.0. Do NOT change this to net8.0/net9.0 -
       the Emby Server host loads plugin assemblies into its own (older) CLR/AppDomain-style
       plugin loader and a modern TFM will fail to load or fail at runtime with binding errors.
-    - The "mediabrowser.server.core" NuGet package version below matches the one used by the
-      EmbyNotify / EmbyWeeklyDigest reference plugins (Emby 4.8.x/4.9.x SDK surface). If your
-      target server build is newer, bump the version and re-check for any breaking API
-      changes (in particular around IServerApplicationHost, InternalItemsQuery and
-      IScheduledTask) before shipping.
+    - Built against "mediabrowser.server.core" 4.8.0.80 (the plugin runs on Emby 4.9.x-4.11).
+      When bumping the SDK version, re-check for breaking API changes (in particular around
+      IServerApplicationHost, InternalItemsQuery and the notification interfaces) before
+      shipping.
   -->
 
   <PropertyGroup>
@@ -17,12 +16,12 @@
     <LangVersion>7.3</LangVersion>
     <AssemblyName>EmbyCast.Plugin</AssemblyName>
     <RootNamespace>EmbyCast.Plugin</RootNamespace>
-    <!-- Bump this on every release, even for dashboard-only (config.html/config.js) changes:
-         Emby's dashboard caches the plugin config page in the browser keyed by plugin version,
-         so leaving this unchanged after editing config.html/config.js means admins can rebuild
-         and redeploy the DLL correctly and still see the OLD page until they hard-refresh /
-         clear their browser cache. Bumping the version forces a fresh fetch. -->
-    <VersionPrefix>1.2.7</VersionPrefix>
+    <!-- Bump this on every release, including dashboard-only (app.html/app.js) changes: the
+         dashboard shell (config.js) loads app.html/app.js from EmbyCast/Client/...?v=<this
+         version>, so a new version means new URLs that browsers can't serve from cache.
+         (Emby itself caches config.html/config.js keyed by the SERVER version only - that's
+         why the shell exists, see Configuration/Web/config.js.) -->
+    <VersionPrefix>1.3.0</VersionPrefix>
     <VersionSuffix></VersionSuffix>
     <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
     <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
@@ -37,16 +36,68 @@
 
   <ItemGroup>
     <PackageReference Include="mediabrowser.server.core" Version="4.8.0.80" />
-    <!-- netstandard2.0 has no built-in JSON serializer; System.Text.Json (or Newtonsoft.Json,
-         which Emby already ships) both work fine here. We use System.Text.Json to match the
-         reference plugins and avoid an extra runtime dependency conflict with Emby's own
-         Newtonsoft.Json version. -->
+    <!-- netstandard2.0 has no built-in JSON serializer. System.Text.Json avoids a version
+         conflict with the Newtonsoft.Json that Emby ships itself. -->
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Configuration\Web\**" />
-    <EmbeddedResource Include="thumb.png" />
+    <DashboardAppFile Include="Configuration\Web\app.html;Configuration\Web\app.js" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- config.html/config.js (the shell) are served by Emby itself and must stay plain.
+         app.html/app.js are served by EmbyCast (EmbyCastApi.EmbeddedClientFile) and are
+         embedded gzip-compressed instead - see the EmbedCompressedDashboard target below. -->
+    <EmbeddedResource Include="Configuration\Web\**" Exclude="@(DashboardAppFile)" />
+    <EmbeddedResource Include="thumb.webp" />
+  </ItemGroup>
+
+  <!-- Gzips the dashboard files at build time (the sources stay plain and editable) and embeds
+       the compressed copies as "<RootNamespace>.Configuration.Web.<file>.gz". Keeps the DLL
+       noticeably smaller; the server decompresses them once when first requested. -->
+  <UsingTask TaskName="GzipDashboardFiles" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDir ParameterType="System.String" Required="true" />
+      <LogicalNamePrefix ParameterType="System.String" Required="true" />
+      <Compressed ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.IO.Compression" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Directory.CreateDirectory(OutputDir);
+        var result = new System.Collections.Generic.List<Microsoft.Build.Framework.ITaskItem>();
+        foreach (var file in Files)
+        {
+            var source = file.GetMetadata("FullPath");
+            var name = Path.GetFileName(source);
+            var target = Path.Combine(OutputDir, name + ".gz");
+            using (var input = File.OpenRead(source))
+            using (var output = File.Create(target))
+            using (var gzip = new GZipStream(output, CompressionLevel.Optimal))
+            {
+                input.CopyTo(gzip);
+            }
+            var item = new Microsoft.Build.Utilities.TaskItem(target);
+            item.SetMetadata("LogicalName", LogicalNamePrefix + name + ".gz");
+            result.Add(item);
+            Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Normal,
+                "EmbyCast: embedded {0} gzip-compressed ({1:N0} -> {2:N0} bytes)", name, new FileInfo(source).Length, new FileInfo(target).Length);
+        }
+        Compressed = result.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="EmbedCompressedDashboard" BeforeTargets="PrepareForBuild">
+    <GzipDashboardFiles Files="@(DashboardAppFile)" OutputDir="$(IntermediateOutputPath)dashboard" LogicalNamePrefix="$(RootNamespace).Configuration.Web.">
+      <Output TaskParameter="Compressed" ItemName="CompressedDashboardFile" />
+    </GzipDashboardFiles>
+    <ItemGroup>
+      <EmbeddedResource Include="@(CompressedDashboardFile)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

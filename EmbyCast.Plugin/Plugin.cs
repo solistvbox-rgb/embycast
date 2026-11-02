@@ -29,7 +29,7 @@ namespace EmbyCast.Plugin
     public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasThumbImage
     {
         private readonly IServerApplicationHost _applicationHost;
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
 
         public static Plugin Instance { get; private set; }
 
@@ -37,6 +37,7 @@ namespace EmbyCast.Plugin
         public DeliveryService Delivery { get; }
         public TimerService Timer { get; }
         public MediaNewsService MediaNews { get; }
+        public SystemMessageService SystemMessages { get; }
 
         public Plugin(
             IApplicationPaths appPaths,
@@ -47,12 +48,13 @@ namespace EmbyCast.Plugin
         {
             Instance = this;
             _applicationHost = applicationHost;
-            _logger = logManager.GetLogger(nameof(Plugin));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(Plugin)));
 
             Store = new MessageStore(appPaths, logManager);
             Delivery = new DeliveryService(applicationHost, Store, logManager, () => Configuration);
             Timer = new TimerService(Delivery, Store, applicationHost, logManager);
             MediaNews = new MediaNewsService(logManager);
+            SystemMessages = new SystemMessageService(applicationHost, Store, Delivery, logManager);
 
             // NOTE: Configuration must NOT be touched in this constructor. Emby assigns the
             // plugin's file path (which BasePlugin needs to locate the config XML) only AFTER
@@ -129,14 +131,13 @@ namespace EmbyCast.Plugin
         public override string Description =>
             "Send instant, scheduled, countdown/timer, media-news, welcome and offline messages to your Emby users from one dashboard page.";
 
-        /// <summary>Logo shown on Dashboard -> Plugins, embedded directly as thumb.png (same
-        /// embedded-resource pattern as the EmbyNotify / EmbyWeeklyDigest reference plugins) so
-        /// this can reuse their confirmed-working ImageFormat.Png value rather than guessing at
-        /// an unverified enum member for JPEG.</summary>
+        /// <summary>Logo shown on Dashboard -> Plugins, embedded as thumb.webp (WebP quality 95,
+        /// ~19 KB instead of the former 52 KB PNG, visually identical, transparency kept).
+        /// ImageFormat.Webp exists in the SDK this builds against (4.8.0.80) and on Emby 4.11.</summary>
         public Stream GetThumbImage() =>
-            GetType().Assembly.GetManifestResourceStream("EmbyCast.Plugin.thumb.png");
+            GetType().Assembly.GetManifestResourceStream("EmbyCast.Plugin.thumb.webp");
 
-        public ImageFormat ThumbImageFormat => ImageFormat.Png;
+        public ImageFormat ThumbImageFormat => ImageFormat.Webp;
 
         public IEnumerable<PluginPageInfo> GetPages()
         {
@@ -167,19 +168,10 @@ namespace EmbyCast.Plugin
         }
 
         /// <summary>
-        /// Called by Emby's InstallationManager right before it removes the plugin (Dashboard ->
-        /// Plugins -> Uninstall) - part of the standard IPlugin contract (BasePlugin&lt;T&gt;
-        /// declares it virtual specifically for this). Emby's own uninstall flow only ever
-        /// deletes the plugin's own DLL file - it does NOT touch anything else the plugin created
-        /// (see MediaBrowser/Emby's InstallationManager.UninstallPlugin), so without this override
-        /// both embycast-store.json (message history, scheduled messages, groups, welcomed-user
-        /// tracking) and the plugin's configuration XML would silently survive an uninstall,
-        /// ready to be picked up again by a future reinstall. That's Emby's deliberate default
-        /// (most plugins want settings preserved across a reinstall) but not what's wanted here -
-        /// added 2026-08 at the user's explicit request for a clean "everything gone" uninstall.
-        /// Each half is wrapped in its own try/catch so one failing (e.g. a locked file) never
-        /// blocks the other, and neither is allowed to throw out of this method - a plugin
-        /// misbehaving here should never be able to prevent Emby from completing the uninstall.
+        /// Called by Emby right before the plugin is uninstalled (Dashboard -> Plugins ->
+        /// Uninstall). Emby itself only deletes the DLL, so this removes embycast-store.json and
+        /// the configuration XML too - an uninstall leaves nothing behind. Each part has its own
+        /// try/catch, and nothing may throw out of here, so Emby can always finish the uninstall.
         /// </summary>
         public override void OnUninstalling()
         {
@@ -214,8 +206,6 @@ namespace EmbyCast.Plugin
         /// it too to build the background services, so it's exposed here.</summary>
         public IServerApplicationHost ApplicationHost => _applicationHost;
 
-        public ILogger Logger => _logger;
-
         private readonly object _configLock = new object();
         private volatile bool _uninstalling;
 
@@ -238,10 +228,9 @@ namespace EmbyCast.Plugin
 
         /// <summary>
         /// Self-update: downloads the latest GitHub release's DLL asset (see UpdateChecker.cs)
-        /// and atomically swaps it in for the currently-loaded plugin DLL on disk. Mirrors the
-        /// EmbyNotify/EmbyWeeklyDigest reference plugins' approach exactly, including the
+        /// and atomically swaps it in for the currently-loaded plugin DLL on disk, with a
         /// .bak-then-swap sequence (so a failed write can't leave the plugin folder without a
-        /// working DLL) and the best-effort call to IApplicationHost.NotifyPendingRestart(); if
+        /// working DLL) and a best-effort call to IApplicationHost.NotifyPendingRestart(); if
         /// that fails, the update is still installed, the admin just won't see Emby's built-in
         /// "restart pending" banner and should restart manually to load the new DLL (the
         /// InstallUpdateResult.Message returned below says so either way).
@@ -309,7 +298,7 @@ namespace EmbyCast.Plugin
                     return result;
                 }
 
-                // Defense-in-depth domain check (added 2026-08-20): check.DownloadUrl comes
+                // Defense-in-depth domain check: check.DownloadUrl comes
                 // straight from GitHub's own API response (UpdateChecker's "browser_download_url"
                 // field), so this doesn't protect against a compromised GitHub account - the
                 // SHA-256 checksum verified below comes from that same API response, so an

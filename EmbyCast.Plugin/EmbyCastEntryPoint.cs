@@ -5,8 +5,11 @@ using System.Threading.Tasks;
 using EmbyCast.Plugin.Models;
 using EmbyCast.Plugin.Services;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Session;
+using MediaBrowser.Model.Events;
 using MediaBrowser.Model.Logging;
 
 namespace EmbyCast.Plugin
@@ -18,12 +21,8 @@ namespace EmbyCast.Plugin
     ///  - runs the scheduled-message polling loop;
     ///  - runs the weekly media-news auto-send polling loop.
     ///
-    /// Constructor parameters (ISessionManager, ILogManager) are supplied by Emby's own DI
-    /// container when it instantiates every IServerEntryPoint implementation - the same
-    /// pattern used by the reference EmbyNotify / EmbyWeeklyDigest plugins - rather than
-    /// resolved manually, which keeps this class testable and avoids relying on
-    /// IServerApplicationHost.Resolve&lt;T&gt;() for services that are already available as
-    /// constructor dependencies.
+    /// Constructor parameters are supplied by Emby's DI container when it instantiates every
+    /// IServerEntryPoint implementation.
     ///
     /// Only administrators can trigger sends via the API (see Api/EmbyCastApi.cs,
     /// [Authenticated(Roles = "Admin")]); this entry point only reacts to server-side events,
@@ -34,7 +33,7 @@ namespace EmbyCast.Plugin
         private readonly IServerApplicationHost _appHost;
         private readonly ISessionManager _sessionManager;
         private readonly ILogManager _logManager;
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
 
         /// <summary>One token for everything this entry point starts - both polling loops and
         /// the delayed per-login work in OnSessionStarted - cancelled in Dispose().</summary>
@@ -45,12 +44,15 @@ namespace EmbyCast.Plugin
         /// exit (each only has to finish its current iteration) before giving up on them.</summary>
         private static readonly TimeSpan ShutdownWait = TimeSpan.FromSeconds(5);
 
+        private IUserManager _userManager;
+        private UserCleanupService _userCleanup;
+
         public EmbyCastEntryPoint(IServerApplicationHost appHost, ISessionManager sessionManager, ILogManager logManager)
         {
             _appHost = appHost;
             _sessionManager = sessionManager;
             _logManager = logManager;
-            _logger = logManager.GetLogger(nameof(EmbyCastEntryPoint));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(EmbyCastEntryPoint)));
         }
 
         public void Run()
@@ -65,6 +67,18 @@ namespace EmbyCast.Plugin
             // First, before anything below can read the migrated values (the media-news
             // scheduler in particular) - see Plugin.RunStartupMigrations.
             plugin.RunStartupMigrations();
+
+            // Users deleted in Emby: clean up leftovers from deletions EmbyCast missed (server
+            // was off, or older plugin versions) once now, then follow live deletions - see
+            // UserCleanupService. Before the background loops start, so they never act on stale
+            // recipients.
+            _userCleanup = new UserCleanupService(_appHost, plugin.Store, () => plugin.Configuration, plugin.MutateConfiguration, _logManager);
+            _userCleanup.ReconcileWithExistingUsers();
+            _userManager = _appHost.Resolve<IUserManager>();
+            if (_userManager != null)
+                _userManager.UserDeleted += OnUserDeleted;
+            else
+                _logger.Warn("EmbyCast: IUserManager not available; deleted users are only cleaned up at the next server start.");
 
             if (_sessionManager != null)
             {
@@ -84,13 +98,9 @@ namespace EmbyCast.Plugin
             // poll below once its start time arrives, same as if the server hadn't restarted.
             plugin.Timer.ResumeAfterRestart();
 
-            // Offline-queue expiry and history cleanup ("Geplante Reinigung") now run
-            // periodically from within ScheduledMessageBackgroundService's own loop instead of
-            // once here at startup, so a long-running server without a restart still gets
-            // cleaned up on schedule. That same loop also drives TimerService.CheckPendingStart()
-            // (see ScheduledMessageBackgroundService.RunLoopAsync) - passed in here rather than
-            // given its own polling loop, since a 20s-granularity check is more than fine for
-            // "has this scheduled timer's start time arrived yet".
+            // Scheduled Cleanup (offline expiry + history purge) and TimerService.CheckPendingStart()
+            // run periodically inside ScheduledMessageBackgroundService's loop, so a server that
+            // runs for weeks is still cleaned up; ~20s granularity is plenty for both.
             var token = _lifetimeCts.Token;
             var scheduledService = new ScheduledMessageBackgroundService(
                 plugin.Delivery, plugin.Store, plugin.Timer, _logManager, () => plugin.Configuration);
@@ -174,11 +184,17 @@ namespace EmbyCast.Plugin
             }
         }
 
+        private void OnUserDeleted(object sender, GenericEventArgs<User> e) => _userCleanup?.OnUserDeleted(e?.Argument);
+
         public void Dispose()
         {
             if (_sessionManager != null)
             {
                 _sessionManager.SessionStarted -= OnSessionStarted;
+            }
+            if (_userManager != null)
+            {
+                _userManager.UserDeleted -= OnUserDeleted;
             }
 
             try { _lifetimeCts.Cancel(); } catch { /* ignore */ }

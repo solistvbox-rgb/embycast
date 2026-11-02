@@ -28,11 +28,13 @@ namespace EmbyCast.Plugin.Services
         public string PostAction { get; set; }
         public string LastError { get; set; }
         /// <summary>Populated for both Active and Pending, so the dashboard can build a "To: ..."
-        /// recipient line either way (see config.js's buildRecipientLineHtml, which already
-        /// works off any object exposing these three fields, e.g. a scheduled-message record).</summary>
+        /// recipient line either way (app.js buildRecipientLineHtml).</summary>
         public string RecipientMode { get; set; }
         public List<string> SpecificUserIds { get; set; } = new List<string>();
         public List<string> SpecificGroupIds { get; set; } = new List<string>();
+        /// <summary>0 = dialog, &gt; 0 = short pop-up (no header shown) - lets the dashboard
+        /// label the timer the way users see it.</summary>
+        public int TimeoutMs { get; set; }
         /// <summary>Pending-only: when this timer is due to actually start.</summary>
         public DateTime? ScheduledStartUtc { get; set; }
         /// <summary>Pending-only: the countdown length it will run for once started (Active
@@ -55,7 +57,7 @@ namespace EmbyCast.Plugin.Services
         private readonly DeliveryService _delivery;
         private readonly MessageStore _store;
         private readonly IServerApplicationHost _appHost;
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
 
         private CancellationTokenSource _cts;
         private readonly object _lock = new object();
@@ -65,7 +67,7 @@ namespace EmbyCast.Plugin.Services
             _delivery = delivery;
             _store = store;
             _appHost = appHost;
-            _logger = logManager.GetLogger(nameof(TimerService));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(TimerService)));
         }
 
         public TimerStatusDto GetStatus()
@@ -91,7 +93,8 @@ namespace EmbyCast.Plugin.Services
                     LastError = state.LastError,
                     RecipientMode = state.RecipientMode,
                     SpecificUserIds = state.SpecificUserIds,
-                    SpecificGroupIds = state.SpecificGroupIds
+                    SpecificGroupIds = state.SpecificGroupIds,
+                    TimeoutMs = state.TimeoutMs
                 };
             }
 
@@ -108,6 +111,7 @@ namespace EmbyCast.Plugin.Services
                     RecipientMode = state.RecipientMode,
                     SpecificUserIds = state.SpecificUserIds,
                     SpecificGroupIds = state.SpecificGroupIds,
+                    TimeoutMs = state.TimeoutMs,
                     ScheduledStartUtc = state.ScheduledStartUtc,
                     TotalMinutes = state.TotalMinutes
                 };
@@ -123,10 +127,8 @@ namespace EmbyCast.Plugin.Services
         /// <summary>True if a timer job currently occupies the single-timer slot - either
         /// actively counting down, or scheduled/pending for a future start. A leftover record
         /// from a timer that already completed or was cancelled does NOT count (see GetStatus's
-        /// doc comment above) - only used to decide whether starting/scheduling a new timer
-        /// should be blocked with "already running/scheduled" rather than silently replacing it,
-        /// per the admin's explicit request that a new Start no longer auto-cancels an existing
-        /// one.</summary>
+        /// doc comment above) - used to refuse a new start/schedule instead of replacing the
+        /// existing timer.</summary>
         public bool HasActiveOrPendingTimer()
         {
             var state = _store.GetActiveTimer();
@@ -154,7 +156,7 @@ namespace EmbyCast.Plugin.Services
             {
                 Header = string.IsNullOrWhiteSpace(header) ? "Countdown" : header,
                 TextTemplate = string.IsNullOrWhiteSpace(textTemplate)
-                    ? "The server will restart in {minutes} minute(s)."
+                    ? DefaultTemplateFor(postAction)
                     : textTemplate,
                 TimeoutMs = timeoutMs,
                 TotalMinutes = totalMinutes,
@@ -206,7 +208,7 @@ namespace EmbyCast.Plugin.Services
             {
                 Header = string.IsNullOrWhiteSpace(header) ? "Countdown" : header,
                 TextTemplate = string.IsNullOrWhiteSpace(textTemplate)
-                    ? "The server will restart in {minutes} minute(s)."
+                    ? DefaultTemplateFor(postAction)
                     : textTemplate,
                 TimeoutMs = timeoutMs,
                 TotalMinutes = totalMinutes,
@@ -451,7 +453,9 @@ namespace EmbyCast.Plugin.Services
 
                 await _delivery.SendAsync(
                     state.Header, text, state.TimeoutMs, mode, state.SpecificUserIds, MessageOrigin.Timer,
-                    specificGroupIds: state.SpecificGroupIds
+                    specificGroupIds: state.SpecificGroupIds,
+                    // Countdown messages are never kept for offline users - see SendAsync.
+                    keepForOfflineUsers: false
                 ).ConfigureAwait(false);
 
                 _store.UpdateActiveTimer(s =>
@@ -465,18 +469,39 @@ namespace EmbyCast.Plugin.Services
             }
         }
 
+        /// <summary>Message used when no template was given (API callers - the dashboard always
+        /// sends one). Matches the post-countdown action, so a timer without restart/shutdown
+        /// never announces one. English, as the server has no per-request language; the
+        /// dashboard's own (EN/DE) defaults are the same texts.</summary>
+        internal static string DefaultTemplateFor(PostTimerAction postAction)
+        {
+            switch (postAction)
+            {
+                case PostTimerAction.RestartServer: return "The server will restart in {minutes} minute(s).";
+                case PostTimerAction.ShutdownServer: return "The server will shut down in {minutes} minute(s).";
+                default: return "Countdown: {minutes} minute(s) remaining";
+            }
+        }
+
         // Matches "in {minutes} minute(s)" (English default template) or "in {minutes}
         // Minute(n)" (German default template) so the zero-minute message reads naturally as
         // "...will restart now."/"...wird jetzt neu gestartet." instead of "...in 0 minute(s).".
         private static readonly Regex FinalPhraseEn = new Regex(@"in\s*\{minutes\}\s*minute\(s\)", RegexOptions.IgnoreCase);
         private static readonly Regex FinalPhraseDe = new Regex(@"in\s*\{minutes\}\s*Minute\(n\)", RegexOptions.IgnoreCase);
+        // The "None" defaults ("Countdown: {minutes} minute(s) remaining" / "Countdown: noch
+        // {minutes} Minute(n)") end as "Countdown: finished" / "Countdown: abgelaufen".
+        private static readonly Regex FinalRemainingEn = new Regex(@"\{minutes\}\s*minute\(s\)\s*remaining", RegexOptions.IgnoreCase);
+        private static readonly Regex FinalRemainingDe = new Regex(@"noch\s*\{minutes\}\s*Minute\(n\)", RegexOptions.IgnoreCase);
 
         /// <summary>Renders the timer's text template for the moment the countdown hits zero.
-        /// Custom templates that don't match either shipped default simply fall back to
-        /// substituting "0" for {minutes}, same as before.</summary>
+        /// Custom templates that don't match a shipped default simply fall back to substituting
+        /// "0" for {minutes}, same as before. Must stay in sync with renderFinalText() in
+        /// Configuration/Web/app.js (the dashboard preview).</summary>
         internal static string RenderFinalText(string template)
         {
             var text = template ?? "";
+            if (FinalRemainingEn.IsMatch(text)) return FinalRemainingEn.Replace(text, "finished");
+            if (FinalRemainingDe.IsMatch(text)) return FinalRemainingDe.Replace(text, "abgelaufen");
             if (FinalPhraseEn.IsMatch(text)) return FinalPhraseEn.Replace(text, "now");
             if (FinalPhraseDe.IsMatch(text)) return FinalPhraseDe.Replace(text, "jetzt");
             return text.Replace("{minutes}", "0");
@@ -490,7 +515,9 @@ namespace EmbyCast.Plugin.Services
                 var mode = Enum.TryParse<RecipientMode>(state.RecipientMode, out var m) ? m : RecipientMode.Active;
                 await _delivery.SendAsync(
                     state.Header, text, state.TimeoutMs, mode, state.SpecificUserIds, MessageOrigin.Timer,
-                    specificGroupIds: state.SpecificGroupIds
+                    specificGroupIds: state.SpecificGroupIds,
+                    // Countdown messages are never kept for offline users - see SendAsync.
+                    keepForOfflineUsers: false
                 ).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -502,12 +529,8 @@ namespace EmbyCast.Plugin.Services
         /// <summary>Called from the plugin's IServerEntryPoint.Dispose() so a running countdown's
         /// background task doesn't keep a thread alive after the plugin/server shuts down.
         /// Deliberately NOT the same as a user-initiated CancelTimer(): this must never touch the
-        /// persisted timer state, only stop the in-memory task - an active or pending timer is
-        /// meant to survive a restart (see ResumeAfterRestart/CheckPendingStart, and the admin's
-        /// explicit request that a scheduled timer "soll bei Neustart nicht verloren gehen"), so
-        /// shutdown marking it cancelled/clearing ScheduledStartUtc the way CancelTimer() does
-        /// would silently destroy a still-valid scheduled timer on every ordinary server
-        /// restart.</summary>
+        /// persisted timer state, only stop the in-memory task - an active or pending timer must
+        /// survive a restart (see ResumeAfterRestart/CheckPendingStart).</summary>
         public void StopForShutdown()
         {
             CancellationTokenSource ctsToCancel;

@@ -11,7 +11,7 @@ namespace EmbyCast.Plugin.Services
 {
     /// <summary>
     /// Polls the scheduled-message queue and sends any message whose SendAtUtc has passed, and
-    /// runs the "Geplante Reinigung" cleanup pass (offline-queue expiry + history purge) on the
+    /// runs the Scheduled Cleanup pass (offline-queue expiry + history purge) on the
     /// same loop. A simple poll loop (rather than one Task.Delay-until-due per message) keeps
     /// this robust against messages being added/cancelled while the loop sleeps, and against
     /// server clock changes - at the cost of at most ~20s of scheduling jitter, which is fine
@@ -31,7 +31,7 @@ namespace EmbyCast.Plugin.Services
         private readonly DeliveryService _delivery;
         private readonly MessageStore _store;
         private readonly TimerService _timer;
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
         private readonly Func<PluginConfiguration> _getConfig;
         private DateTime _lastCleanupUtc = DateTime.MinValue;
 
@@ -45,7 +45,7 @@ namespace EmbyCast.Plugin.Services
             _delivery = delivery;
             _store = store;
             _timer = timer;
-            _logger = logManager.GetLogger(nameof(ScheduledMessageBackgroundService));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(ScheduledMessageBackgroundService)));
             _getConfig = getConfig;
         }
 
@@ -96,7 +96,7 @@ namespace EmbyCast.Plugin.Services
             _logger.Info("EmbyCast: scheduled-message background loop stopped.");
         }
 
-        /// <summary>"Geplante Reinigung": expires stale offline-queued messages and purges old
+        /// <summary>Scheduled Cleanup: expires stale offline-queued messages and purges old
         /// history entries per the admin's configured retention. Runs on its own timer inside
         /// this same loop rather than a separate background service, since neither task is
         /// expensive enough to warrant its own thread/loop.</summary>
@@ -129,6 +129,7 @@ namespace EmbyCast.Plugin.Services
             if (config.HistoryCleanupIncludeMediaNews) includedTypes.Add(MessageOrigin.MediaNews);
             if (config.HistoryCleanupIncludeWelcome) includedTypes.Add(MessageOrigin.Welcome);
             if (config.HistoryCleanupIncludeOffline) includedTypes.Add(MessageOrigin.Offline);
+            if (config.HistoryCleanupIncludeSystem) includedTypes.Add(MessageOrigin.System);
 
             if (includedTypes.Count == 0) return;
 

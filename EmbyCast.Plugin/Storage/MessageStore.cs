@@ -24,7 +24,7 @@ namespace EmbyCast.Plugin.Storage
     public class MessageStore
     {
         private readonly string _filePath;
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
         private readonly object _lock = new object();
         private StoreData _data;
         /// <summary>Set by DeleteStoreFile() (uninstall). From then on Save() is a no-op, so the
@@ -41,7 +41,7 @@ namespace EmbyCast.Plugin.Storage
         public MessageStore(IApplicationPaths appPaths, ILogManager logManager)
         {
             _filePath = Path.Combine(appPaths.DataPath, "embycast-store.json");
-            _logger = logManager.GetLogger(nameof(MessageStore));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(MessageStore)));
             _data = Load();
         }
 
@@ -103,6 +103,8 @@ namespace EmbyCast.Plugin.Storage
             data.ScheduledMessages = data.ScheduledMessages ?? new List<ScheduledMessageRecord>();
             data.OfflineQueue = data.OfflineQueue ?? new List<OfflineMessageRecord>();
             data.Groups = data.Groups ?? new List<UserGroup>();
+            data.SystemNotifications = data.SystemNotifications ?? new List<SystemNotificationEntry>();
+            data.SystemNotifications.RemoveAll(n => n == null);
             data.WelcomedUserIds = new HashSet<string>(
                 (data.WelcomedUserIds ?? Enumerable.Empty<string>()).Where(id => id != null),
                 StringComparer.OrdinalIgnoreCase);
@@ -128,6 +130,13 @@ namespace EmbyCast.Plugin.Storage
             }
             foreach (var g in data.Groups)
                 g.UserIds = g.UserIds ?? new List<string>();
+            foreach (var n in data.SystemNotifications)
+            {
+                n.EventIds = n.EventIds ?? new List<string>();
+                n.RecipientUserIds = n.RecipientUserIds ?? new List<string>();
+                n.UserFilterIds = n.UserFilterIds ?? new List<string>();
+                n.UserFilterGroupIds = n.UserFilterGroupIds ?? new List<string>();
+            }
             if (data.ActiveTimer != null)
             {
                 data.ActiveTimer.PresetMinutes = data.ActiveTimer.PresetMinutes ?? new List<int>();
@@ -523,7 +532,7 @@ namespace EmbyCast.Plugin.Storage
             }
         }
 
-        /// <summary>"Geplante Reinigung" Feld 1, automatic: removes offline messages older than
+        /// <summary>Scheduled Cleanup, automatic: removes offline messages older than
         /// maxAgeDays and marks each one's delivery record (on its originating HistoryEntry, if
         /// still present) as Expired, so "Status & History" reflects that it will never be
         /// delivered now instead of showing "Pending" forever. Returns the number expired.</summary>
@@ -537,9 +546,9 @@ namespace EmbyCast.Plugin.Storage
             }
         }
 
-        /// <summary>"Geplante Reinigung" Feld 1, manual "Alle nicht zugestellten Nachrichten
-        /// löschen" button: expires every currently queued offline message right now,
-        /// regardless of age. Returns the number expired.</summary>
+        /// <summary>Scheduled Cleanup, manual "Delete all undelivered messages" button: expires
+        /// every currently queued offline message right now, regardless of age. Returns the
+        /// number expired.</summary>
         public int PurgeAllOffline()
         {
             lock (_lock)
@@ -587,10 +596,10 @@ namespace EmbyCast.Plugin.Storage
         }
 
         // ---------------------------------------------------------------
-        // "Geplante Reinigung" Feld 2 - aged/on-demand history cleanup
+        // Scheduled Cleanup - aged/on-demand history cleanup
         // ---------------------------------------------------------------
 
-        /// <summary>"Geplante Reinigung" Feld 2, automatic: deletes history entries older than
+        /// <summary>Scheduled Cleanup, automatic: deletes history entries older than
         /// maxAgeDays whose MessageType is in includedTypes. Also cancels any offline deliveries
         /// still tied to a deleted entry (same as DismissHistory/ClearHistory), so a deleted
         /// history row can never leave an orphaned queue entry pointing at it. Returns the number
@@ -601,7 +610,7 @@ namespace EmbyCast.Plugin.Storage
             return RemoveHistoryWhereLocked(h => h.CreatedAtUtc < cutoff && MatchesType(h, includedTypes));
         }
 
-        /// <summary>"Geplante Reinigung" Feld 2, manual "History sofort löschen" button: deletes
+        /// <summary>Scheduled Cleanup, manual "Delete history now" button: deletes
         /// every history entry whose MessageType is in includedTypes right now, regardless of
         /// age. Returns the number removed.</summary>
         public int PurgeHistoryNow(HashSet<MessageOrigin> includedTypes)
@@ -627,7 +636,7 @@ namespace EmbyCast.Plugin.Storage
         }
 
         // ---------------------------------------------------------------
-        // Storage stats (file-size breakdown for the "Geplante Reinigung" card)
+        // Storage stats (file-size breakdown for the Scheduled Cleanup tile)
         // ---------------------------------------------------------------
 
         public StorageStats GetStorageStats()
@@ -732,6 +741,115 @@ namespace EmbyCast.Plugin.Storage
             lock (_lock)
             {
                 if (_data.WelcomedUserIds.Remove(userId)) Save();
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Deleted Emby users
+        // ---------------------------------------------------------------
+
+        /// <summary>What <see cref="RemoveUserReferences"/> changed - for logging.</summary>
+        public class UserRemovalReport
+        {
+            public int Groups { get; set; }
+            public int ScheduledMessages { get; set; }
+            public bool Timer { get; set; }
+            public bool Welcomed { get; set; }
+            public int OfflineMessages { get; set; }
+            public int SystemMessages { get; set; }
+            public bool Any => Groups > 0 || ScheduledMessages > 0 || Timer || Welcomed || OfflineMessages > 0 || SystemMessages > 0;
+
+            public override string ToString() =>
+                $"{Groups} group(s), {ScheduledMessages} scheduled message(s), timer: {(Timer ? "yes" : "no")}, " +
+                $"welcomed list: {(Welcomed ? "yes" : "no")}, {OfflineMessages} queued offline message(s), " +
+                $"{SystemMessages} System Message(s)";
+        }
+
+        private static bool SameUser(string candidate, string normalizedId) =>
+            string.Equals(IdNormalization.Normalize(candidate), normalizedId, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Removes every reference to a user that no longer exists in Emby, in one save:
+        /// group memberships, "Specific" recipients of pending scheduled messages and of the
+        /// timer, the welcomed-users list, and queued offline messages. Queued offline messages
+        /// are dropped and their history delivery is set to Failed with
+        /// <see cref="DeliveryNotes.UserDeleted"/> - they could never be delivered, and would
+        /// otherwise show "Pending" until offline expiry. <paramref name="username"/> (known when
+        /// called from Emby's UserDeleted event) replaces a bare id in those history records.
+        /// Media News recipients live in PluginConfiguration and are handled by the caller.</summary>
+        public UserRemovalReport RemoveUserReferences(string userId, string username)
+        {
+            var report = new UserRemovalReport();
+            var id = IdNormalization.Normalize(userId);
+            if (string.IsNullOrEmpty(id)) return report;
+
+            lock (_lock)
+            {
+                foreach (var group in _data.Groups)
+                {
+                    if (group.UserIds != null && group.UserIds.RemoveAll(x => SameUser(x, id)) > 0) report.Groups++;
+                }
+                foreach (var scheduled in _data.ScheduledMessages)
+                {
+                    if (scheduled.SpecificUserIds != null && scheduled.SpecificUserIds.RemoveAll(x => SameUser(x, id)) > 0) report.ScheduledMessages++;
+                }
+                if (_data.ActiveTimer?.SpecificUserIds != null && _data.ActiveTimer.SpecificUserIds.RemoveAll(x => SameUser(x, id)) > 0)
+                    report.Timer = true;
+                foreach (var system in _data.SystemNotifications)
+                {
+                    var removed = system.RecipientUserIds.RemoveAll(x => SameUser(x, id))
+                                  + system.UserFilterIds.RemoveAll(x => SameUser(x, id));
+                    if (removed > 0) report.SystemMessages++;
+                }
+
+                report.Welcomed = _data.WelcomedUserIds.RemoveWhere(x => SameUser(x, id)) > 0;
+
+                var queued = _data.OfflineQueue.Where(o => SameUser(o.UserId, id)).ToList();
+                foreach (var record in queued)
+                {
+                    var entry = string.IsNullOrEmpty(record.HistoryEntryId) ? null : _data.History.FirstOrDefault(h => h.Id == record.HistoryEntryId);
+                    if (entry == null) continue;
+                    var name = username;
+                    if (string.IsNullOrEmpty(name) && entry.Deliveries.TryGetValue(record.UserId, out var existing))
+                        name = existing.Username;
+                    entry.Deliveries[record.UserId] = new DeliveryRecord
+                    {
+                        UserId = record.UserId,
+                        Username = string.IsNullOrEmpty(name) ? record.UserId : name,
+                        Status = DeliveryStatus.Failed.ToString(),
+                        Note = DeliveryNotes.UserDeleted
+                    };
+                }
+                var queuedIds = new HashSet<string>(queued.Select(o => o.Id));
+                report.OfflineMessages = _data.OfflineQueue.RemoveAll(o => queuedIds.Contains(o.Id));
+
+                if (report.Any) Save();
+            }
+            return report;
+        }
+
+        /// <summary>Every user id this store still refers to (groups, scheduled messages, timer,
+        /// welcomed list, offline queue), normalized and de-duplicated - used to find references
+        /// to users that were deleted while EmbyCast wasn't running (or before it handled
+        /// deletions at all).</summary>
+        public List<string> GetReferencedUserIds()
+        {
+            lock (_lock)
+            {
+                var ids = new List<string>();
+                foreach (var g in _data.Groups) if (g.UserIds != null) ids.AddRange(g.UserIds);
+                foreach (var s in _data.ScheduledMessages) if (s.SpecificUserIds != null) ids.AddRange(s.SpecificUserIds);
+                if (_data.ActiveTimer?.SpecificUserIds != null) ids.AddRange(_data.ActiveTimer.SpecificUserIds);
+                foreach (var n in _data.SystemNotifications)
+                {
+                    ids.AddRange(n.RecipientUserIds);
+                    ids.AddRange(n.UserFilterIds);
+                }
+                ids.AddRange(_data.WelcomedUserIds);
+                ids.AddRange(_data.OfflineQueue.Select(o => o.UserId));
+                return ids.Select(IdNormalization.Normalize)
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }
         }
 
@@ -908,6 +1026,57 @@ namespace EmbyCast.Plugin.Storage
                 _data.Groups.Remove(group);
                 foreach (var s in _data.ScheduledMessages) s.SpecificGroupIds?.Remove(id);
                 if (_data.ActiveTimer != null) _data.ActiveTimer.SpecificGroupIds?.Remove(id);
+                foreach (var n in _data.SystemNotifications) n.UserFilterGroupIds.Remove(id);
+                Save();
+                return true;
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // System Message entries (see SystemNotificationEntry / SystemMessageNotifier)
+        // ---------------------------------------------------------------
+
+        public List<SystemNotificationEntry> GetSystemNotifications()
+        {
+            lock (_lock) return _data.SystemNotifications.OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Select(Clone).ToList();
+        }
+
+        public SystemNotificationEntry GetSystemNotification(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            lock (_lock) return Clone(_data.SystemNotifications.FirstOrDefault(n => n.Id == id));
+        }
+
+        /// <summary>Creates the entry when its Id is empty or unknown, otherwise replaces the
+        /// existing one. The caller has already validated the values.</summary>
+        public SystemNotificationEntry SaveSystemNotification(SystemNotificationEntry entry)
+        {
+            lock (_lock)
+            {
+                var existing = string.IsNullOrEmpty(entry.Id) ? null : _data.SystemNotifications.FirstOrDefault(n => n.Id == entry.Id);
+                if (existing == null)
+                {
+                    existing = new SystemNotificationEntry();
+                    _data.SystemNotifications.Add(existing);
+                }
+                existing.Name = entry.Name;
+                existing.Enabled = entry.Enabled;
+                existing.DisplayMode = entry.DisplayMode;
+                existing.EventIds = new List<string>(entry.EventIds ?? new List<string>());
+                existing.RecipientUserIds = new List<string>(entry.RecipientUserIds ?? new List<string>());
+                existing.LimitUsers = entry.LimitUsers;
+                existing.UserFilterIds = new List<string>(entry.UserFilterIds ?? new List<string>());
+                existing.UserFilterGroupIds = new List<string>(entry.UserFilterGroupIds ?? new List<string>());
+                Save();
+                return Clone(existing);
+            }
+        }
+
+        public bool DeleteSystemNotification(string id)
+        {
+            lock (_lock)
+            {
+                if (_data.SystemNotifications.RemoveAll(n => n.Id == id) == 0) return false;
                 Save();
                 return true;
             }

@@ -9,23 +9,15 @@ namespace EmbyCast.Plugin.Services
     /// Executes the optional action a countdown timer performs once it reaches zero.
     ///
     /// Calls IApplicationHost.Restart() / Shutdown() (inherited by IServerApplicationHost)
-    /// directly. An earlier version looked these up by name via reflection on the concrete host
-    /// type, out of concern that the member names vary between Emby builds - but that could
-    /// silently find nothing (e.g. an explicit interface implementation isn't a public method
-    /// of the concrete type) and do nothing at runtime. Both members are part of the SDK this
-    /// plugin compiles against (verified against mediabrowser.server.core 4.8.0.80), so a
-    /// missing/renamed member in a future SDK now shows up as a compile error instead.
+    /// directly - both are part of the SDK this plugin compiles against, so a renamed member in
+    /// a future SDK shows up as a compile error instead of silently doing nothing.
     ///
-    /// A "MaintenanceMode" action existed here through v1.2.0 and was removed (2026-08-20): it
-    /// was never actually wired to Emby's real Dashboard > General maintenance-mode toggle (it
-    /// only sent a notice-only message and logged a warning), which a user found misleading. A
-    /// real implementation isn't reliably possible either: "maintenance mode" is NOT a concept
-    /// the plugin SDK (mediabrowser.server.core 4.8.0.80) exposes at all. If Emby ever documents
-    /// a stable API for this, re-add it as a new PostTimerAction case.
+    /// There is no "maintenance mode" action: the plugin SDK offers no API to switch Emby's
+    /// maintenance mode. If one is ever documented, add it as a new PostTimerAction case.
     /// </summary>
     public static class PostTimerActionExecutor
     {
-        public static Task<string> ExecuteAsync(string action, IServerApplicationHost appHost, ILogger logger)
+        public static Task<string> ExecuteAsync(string action, IServerApplicationHost appHost, EmbyCastLogger logger)
         {
             switch (action)
             {
@@ -44,7 +36,7 @@ namespace EmbyCast.Plugin.Services
             }
         }
 
-        private static string Restart(IServerApplicationHost appHost, ILogger logger)
+        private static string Restart(IServerApplicationHost appHost, EmbyCastLogger logger)
         {
             // Same condition Emby's own dashboard uses to offer "Restart": e.g. a server running
             // as a Windows service or in some container setups can't restart itself.
@@ -69,7 +61,7 @@ namespace EmbyCast.Plugin.Services
             }
         }
 
-        private static string Shutdown(IServerApplicationHost appHost, ILogger logger)
+        private static string Shutdown(IServerApplicationHost appHost, EmbyCastLogger logger)
         {
             try
             {

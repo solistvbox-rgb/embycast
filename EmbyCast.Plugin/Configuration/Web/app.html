@@ -1,0 +1,1026 @@
+<!-- EmbyCast dashboard markup. Served by the plugin (GET EmbyCast/Client/Page?v=<version>)
+     and injected into the scrollSlider of the stable config.html shell by config.js.
+     Edit freely: every plugin version gets a fresh URL, so browsers never run a stale copy. -->
+    <style>
+      /* Theme-neutral tokens: mid-gray (128,128,128) sits roughly equidistant between a black
+         and a white dashboard background, so a single set of values reads as a visible-but-
+         subtle outline/fill on BOTH the default dark Emby theme and the light theme - unlike
+         the previous rgba(255,255,255,X) values below, which were tuned only for a dark
+         background and became nearly invisible (white-on-white) on the light theme. */
+      :root {
+        --bcm-border: rgba(128,128,128,0.4);
+        --bcm-fill: rgba(128,128,128,0.08);
+        --bcm-fill-strong: rgba(128,128,128,0.18);
+        /* Accent follows Emby's own accent colour setting; the fallbacks are Emby's default
+           blue for themes that don't set these variables. */
+        --bcm-accent-h: var(--theme-primary-color-hue, 196);
+        --bcm-accent-s: var(--theme-primary-color-saturation, 100%);
+        --bcm-accent-l: var(--theme-primary-color-lightness, 43%);
+        --bcm-accent: hsl(var(--bcm-accent-h), var(--bcm-accent-s), var(--bcm-accent-l));
+        --bcm-on-accent: #fff;
+        /* accent for text/icons, readable on a dark background */
+        --bcm-accent-2: var(--theme-accent-text-color-darkbg, var(--theme-accent-text-color, #3fc1ff));
+      }
+      .bcm-light-bg { --bcm-accent-2: var(--theme-accent-text-color-lightbg, var(--theme-accent-text-color, #0090c4)); }
+      .bcm-page { max-width: 980px; }
+      .sysmsg-events { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:.7em; }
+      .sysmsg-cat { border:1px solid var(--bcm-border); border-radius:6px; padding:.55em .8em; background:var(--bcm-fill); }
+      .bcm-field .sysmsg-cat label { display:flex; align-items:center; gap:.5em; font-size:.86em; opacity:.95; margin:.3em 0; cursor:pointer; }
+      .bcm-field .sysmsg-cat label.sysmsg-cat-head { font-weight:700; font-size:.95em; opacity:1; margin:0 0 .45em; padding-bottom:.45em; border-bottom:1px solid var(--bcm-border); }
+      .sysmsg-cat-events { margin-left:.4em; padding-left:.9em; border-left:2px solid var(--bcm-border); }
+      .bcm-field .sysmsg-cat-events label { opacity:.85; }
+      .sysmsg-cat input { width:14px; height:14px; margin:0; flex:none; cursor:pointer; }
+      .sysmsg-cat .sysmsg-cat-head input { width:16px; height:16px; }
+      .sysmsg-off { opacity:.55; }
+      .sysmsg-list, .sysmsg-form { margin-top:.6em; }
+      /* Release notes of an available update (Plugin Updates tile), rendered from GitHub's Markdown. */
+      .update-notes { margin-top:1em; max-height:360px; overflow-y:auto; border:1px solid var(--bcm-border); border-radius:8px; padding:.4em 1.1em .9em; background:var(--bcm-fill); font-size:.9em; line-height:1.5; }
+      .update-notes h3, .update-notes h4, .update-notes h5 { margin:.9em 0 .35em; font-size:1em; }
+      .update-notes h3 { font-size:1.08em; }
+      .update-notes p { margin:.5em 0; }
+      .update-notes ul, .update-notes ol { margin:.4em 0; padding-left:1.4em; }
+      .update-notes li { margin:.15em 0; }
+      .update-notes code { font-size:.92em; padding:.05em .3em; border-radius:4px; background:var(--bcm-fill-strong); }
+      .update-notes pre { overflow-x:auto; padding:.6em .8em; border-radius:6px; background:var(--bcm-fill-strong); }
+      .update-notes pre code { padding:0; background:none; }
+      .update-notes a { color:var(--bcm-accent-2); }
+      .update-notes hr { border:none; border-top:1px dashed var(--bcm-border); margin:.8em 0; }
+      /* Settings tile: separates Logging / Offline delivery / Tile colours - same dashed line as
+         the sections of Scheduled Cleanup. */
+      .settings-sep { border:none; border-top:1px dashed var(--bcm-border); margin:1.2em 0; }
+      .sysmsg-enabled-row { margin-bottom:1.1em; }
+      .sysmsg-empty { font-size:.85em; opacity:.45; margin:0; }
+      .bcm-page input[type="radio"], .bcm-page input[type="checkbox"] { accent-color:var(--bcm-accent); }
+      .bcm-topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.4em; flex-wrap:wrap; gap:.6em; }
+      .bcm-title { margin:0; font-size:1.6em; }
+      .bcm-subtitle { color:var(--text-color-secondary,#aaa); margin:.2em 0 0; font-size:.95em; }
+      .bcm-langswitch { display:flex; gap:.4em; }
+      .bcm-langbtn { padding:.4em .9em; font-size:.85em; border-radius:4px; border:1px solid var(--bcm-border); background:var(--bcm-fill-strong); color:inherit; cursor:pointer; }
+      .bcm-langbtn.active { background:var(--bcm-accent); border-color:var(--bcm-accent); color:var(--bcm-on-accent); }
+      .bcm-card { border:1px solid var(--bcm-border); border-radius:8px; padding:1.3em 1.4em; margin-bottom:1.6em; background:var(--bcm-fill); box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+      .bcm-card h2 { margin:0 0 .2em; font-size:1.15em; display:flex; align-items:center; gap:.5em; }
+      .bcm-card .bcm-desc { color:var(--text-color-secondary,#aaa); margin:0 0 1.1em; font-size:.88em; }
+      .bcm-field { margin-bottom:1.1em; }
+      .bcm-field label { display:block; margin-bottom:.35em; font-size:.88em; opacity:.85; }
+      .bcm-field input[type=text], .bcm-field input[type=number], .bcm-field input[type=datetime-local], .bcm-field textarea, .bcm-field select {
+        width:100%; box-sizing:border-box; padding:.5em .6em; font-size:1em; border-radius:4px; border:1px solid var(--bcm-border); background:rgba(0,0,0,0.15); color:inherit;
+      }
+      .bcm-field textarea { resize:vertical; min-height:5em; }
+      .bcm-row { display:flex; gap:1em; flex-wrap:wrap; }
+      .bcm-row > .bcm-field { flex:1; min-width:180px; }
+      .bcm-radio-group { display:flex; gap:1.2em; flex-wrap:wrap; margin-bottom:.6em; }
+      .bcm-radio-group label { display:flex; align-items:center; gap:.4em; font-size:.9em; opacity:.9; cursor:pointer; margin:0; }
+      .bcm-userlist { max-height:220px; overflow-y:auto; border:1px solid var(--bcm-border); border-radius:4px; padding:.5em .7em; display:none; }
+      .bcm-userlist.show { display:block; }
+      .bcm-userlist label { display:flex; align-items:center; gap:.5em; padding:.3em 0; font-size:.9em; cursor:pointer; }
+      .bcm-userlist .bcm-nowplaying { opacity:.55; font-size:.82em; margin-left:.3em; }
+      .bcm-btn { padding:.6em 1.5em; font-size:1em; cursor:pointer; border-radius:4px; border:none; background:var(--bcm-accent); color:var(--bcm-on-accent); }
+      .bcm-btn.secondary { background:var(--bcm-fill-strong); color:inherit; border:1px solid var(--bcm-border); }
+      .bcm-btn:disabled { opacity:.5; cursor:default; }
+      .bcm-btnrow { display:flex; gap:.7em; flex-wrap:wrap; align-items:center; }
+      .bcm-status { margin-top:1em; padding:.7em 1em; border-radius:4px; display:none; font-size:.9em; }
+      .bcm-status.ok { display:block; background:rgba(30,140,30,0.2); color:#7ddc7d; border:1px solid rgba(30,140,30,0.4); }
+      .bcm-status.err { display:block; background:rgba(180,30,30,0.2); color:#ff6b6b; border:1px solid rgba(180,30,30,0.4); }
+      .bcm-presets { display:flex; gap:.5em; flex-wrap:wrap; margin-top:.6em; margin-bottom:.6em; }
+      .bcm-preset-chip { padding:.35em .8em; border-radius:99px; border:1px solid var(--bcm-border); background:var(--bcm-fill-strong); font-size:.85em; cursor:pointer; }
+      .bcm-preset-chip.active { background:var(--bcm-accent); border-color:var(--bcm-accent); color:var(--bcm-on-accent); }
+      .bcm-preview { position:relative; border:1px dashed var(--bcm-border); border-radius:6px; padding:.8em 2.2em .8em 1em; font-size:.87em; opacity:.85; white-space:pre-line; margin-bottom:.8em; }
+      /* Close (x) button in the top-right corner of a preview box, so a long scrolled preview can
+         be closed without scrolling back up. Created by toggleMediaNewsPreview() (app.js) each
+         time, because the box content is replaced on every show. */
+      .bcm-preview-close { position:absolute; top:.5em; right:.5em; width:1.6em; height:1.6em; line-height:1; display:flex; align-items:center; justify-content:center; font-size:.85em; color:inherit; opacity:.6; background:none; border:1px solid var(--bcm-border); border-radius:4px; cursor:pointer; padding:0; }
+      .bcm-preview-close:hover { opacity:1; }
+      /* Media News previews only (manual send, auto-send, and the upcoming auto-send card's own
+         "saved settings" preview) - capped at the same height/scroll behavior as .history-list
+         below, so a long list of newly added titles doesn't push the rest of the dashboard page
+         down indefinitely. Deliberately scoped to these three classes rather than the shared
+         .bcm-preview base class, so the Timer countdown preview (which is always short) is left
+         growing freely as before. */
+      .medianews-preview, .medianews-auto-preview, .medianews-auto-saved-preview { max-height:640px; overflow-y:auto; padding-right:.4em; }
+      .bcm-countdown-visual { font-size:1.8em; font-weight:600; text-align:center; padding:.5em 0; letter-spacing:.03em; }
+      .bcm-countdown-bar-track { height:6px; border-radius:99px; background:var(--bcm-fill-strong); overflow:hidden; margin-bottom:1em; }
+      .bcm-countdown-bar-fill { height:100%; background:var(--bcm-accent); width:0%; transition:width 1s linear; }
+      .bcm-toggle-row { display:flex; align-items:center; gap:.6em; margin-bottom:1em; }
+      /* Toggle-switch look for the Welcome Message enabled/disabled state - visually a
+         switch, functionally still a plain <input type="checkbox">, so no JS changes were needed
+         to wire it up (existing code only ever reads/sets .checked). The checkbox itself stays in
+         the DOM and keeps keyboard/screen-reader support; it's just visually hidden (opacity:0,
+         not display:none) and stretched over the whole slider so it remains directly clickable/
+         focusable in place. */
+      .bcm-switch { position:relative; display:inline-block; width:42px; height:24px; flex:none; }
+      .bcm-switch input { position:absolute; top:0; left:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; z-index:1; }
+      .bcm-switch-slider { position:absolute; top:0; left:0; right:0; bottom:0; background:var(--bcm-fill-strong); border:1px solid var(--bcm-border); border-radius:24px; transition:background-color .15s, border-color .15s; }
+      .bcm-switch-slider::before { content:""; position:absolute; height:18px; width:18px; left:2px; top:2px; background:#fff; border-radius:50%; transition:transform .15s; }
+      .bcm-switch input:checked ~ .bcm-switch-slider { background:var(--bcm-accent); border-color:var(--bcm-accent); }
+      .bcm-switch input:checked ~ .bcm-switch-slider::before { transform:translateX(18px); }
+      .bcm-switch input:focus-visible ~ .bcm-switch-slider { outline:2px solid var(--bcm-accent); outline-offset:2px; }
+      /* Caps the history list at roughly 10 typical entries' worth of height before it becomes
+         its own scroll area, so a long message history no longer pushes the rest of the
+         dashboard page down indefinitely. With 10 or fewer entries the list's natural height
+         stays under this cap, so no scrollbar appears at all - it only kicks in once there's
+         enough content to need it. Adjust this one value to show more/fewer before scrolling. */
+      .history-list { max-height:640px; overflow-y:auto; padding-right:.4em; }
+      .bcm-history-item { border:1px solid var(--bcm-border); border-radius:6px; padding:.75em 1em; margin-bottom:.6em; background:rgba(0,0,0,0.15); }
+      .bcm-history-head { display:flex; justify-content:space-between; align-items:flex-start; gap:1em; margin-bottom:.3em; }
+      .bcm-history-tag { font-size:.72em; padding:.15em .55em; border-radius:99px; background:hsla(var(--bcm-accent-h), var(--bcm-accent-s), var(--bcm-accent-l), 0.2); color:var(--bcm-accent-2); border:1px solid hsla(var(--bcm-accent-h), var(--bcm-accent-s), var(--bcm-accent-l), 0.4); margin-right:.4em; }
+      .bcm-badge { display:inline-block; font-size:.72em; padding:.2em .55em; border-radius:99px; margin:.15em; }
+      .bcm-badge.delivered { background:rgba(30,140,30,0.2); color:#7ddc7d; border:1px solid rgba(30,140,30,0.35); }
+      .bcm-badge.pending { background:rgba(180,140,0,0.18); color:#e0b830; border:1px solid rgba(180,140,0,0.35); }
+      .bcm-badge.failed { background:rgba(180,30,30,0.2); color:#ff6b6b; border:1px solid rgba(180,30,30,0.4); }
+      .bcm-badge.expired { background:rgba(128,128,128,0.2); color:#b8b8b8; border:1px solid rgba(128,128,128,0.4); }
+      .bcm-dismiss { font-size:.75em; color:inherit; opacity:.55; background:none; border:1px solid var(--bcm-border); border-radius:4px; padding:.2em .6em; cursor:pointer; }
+      .bcm-inline-note { font-size:.8em; opacity:.55; margin-top:.3em; }
+      /* Display choice (dialog vs. short pop-up) - two selectable cards */
+      .bcm-display-group { display:flex; gap:.8em; flex-wrap:wrap; }
+      .bcm-field label.bcm-display-opt { flex:1 1 230px; display:flex; gap:.6em; align-items:flex-start; margin:0; opacity:1; font-size:inherit; border:1px solid var(--bcm-border); border-radius:6px; padding:.6em .8em; cursor:pointer; background:var(--bcm-fill); }
+      .bcm-display-opt input { margin-top:.25em; accent-color:var(--bcm-accent); }
+      .bcm-field label.bcm-display-opt.selected { border-color:var(--bcm-accent); background:hsla(var(--bcm-accent-h), var(--bcm-accent-s), var(--bcm-accent-l), 0.12); }
+      .bcm-display-text b { display:block; font-size:.95em; }
+      .bcm-display-text small { display:block; font-size:.8em; opacity:.65; margin-top:.15em; line-height:1.35; }
+      .bcm-toast-note { color:#e0b830; opacity:.9; }
+      .bcm-light-bg .bcm-toast-note { color:#8a6d00; }
+      /* "Preview for users" - mimics how the Emby apps render a dialog or a short pop-up */
+      .bcm-user-preview { border:1px dashed var(--bcm-border); border-radius:6px; padding:1em; min-height:4.5em; display:flex; justify-content:center; align-items:center; }
+      .bcm-up-dialog { background:var(--bcm-fill-strong); border:1px solid var(--bcm-border); border-radius:8px; padding:.9em 1.2em; text-align:center; max-width:28em; }
+      .bcm-up-title { font-weight:600; margin-bottom:.5em; }
+      .bcm-up-text { white-space:pre-line; font-size:.92em; }
+      .bcm-up-btn { display:inline-block; margin-top:.8em; padding:.3em 1.2em; border-radius:99px; background:var(--bcm-fill-strong); font-size:.85em; font-weight:600; }
+      .bcm-up-toast { background:var(--bcm-fill-strong); border:1px solid var(--bcm-border); border-radius:8px; padding:.6em .9em; max-width:25ch; font-size:.92em; margin-left:auto; }
+      .bcm-refresh-link { font-size:.8em; opacity:.5; cursor:pointer; }
+
+      /* Expand/Collapse for long "Status & History" message bodies - collapsed by default to
+         roughly 4-5 lines with a soft fade at the bottom; the "Show more/less" toggle
+         link is only added for entries that actually overflow that height (see
+         measureHistoryCollapse()), so short entries render exactly as before with no extra
+         link. The fade uses a mask-image (fading the text itself to transparent) rather than a
+         background-color gradient overlay, so it looks correct regardless of the surrounding
+         page background color - no separate light/dark override needed. */
+      .bcm-history-text { position:relative; font-size:.88em; opacity:.75; margin-bottom:.4em; white-space:pre-line; }
+      .bcm-history-text.collapsed {
+        max-height:4.6em; overflow:hidden;
+        -webkit-mask-image:linear-gradient(to bottom, #000 65%, transparent 100%);
+        mask-image:linear-gradient(to bottom, #000 65%, transparent 100%);
+      }
+      .bcm-history-expand { display:inline-block; font-size:.78em; opacity:.6; cursor:pointer; margin:0 0 .5em; }
+      .bcm-history-expand:hover { opacity:.9; text-decoration:underline; }
+
+      /* Recipient line under "Upcoming scheduled messages" entries - mirrors Media News'
+         existing recipient summary style. ".bcm-recipient-more" is the clickable "+N more" /
+         "show less" toggle for the "Selected users" mode when there are more than 4 names. */
+      .bcm-recipient-line { font-size:.78em; opacity:.55; margin:.15em 0 .4em; }
+      .bcm-recipient-line b { opacity:.85; font-weight:normal; }
+      .bcm-recipient-more { cursor:pointer; text-decoration:underline; opacity:.85; }
+      .bcm-recipient-more:hover { opacity:1; }
+
+      /* Media News "Send only to web-browser sessions" - checkbox row under Recipients plus an
+         explanatory note box below it. */
+      .webonly-row { display:flex; align-items:center; gap:.55em; margin-top:.9em; padding-top:.7em; border-top:1px dashed var(--bcm-border); }
+      .webonly-row input { width:16px; height:16px; accent-color:var(--bcm-accent); cursor:pointer; margin:0; }
+      .webonly-row label { font-size:.9em; opacity:.95; cursor:pointer; display:flex; align-items:center; gap:.4em; margin:0; }
+      .webonly-icon { width:15px; height:15px; stroke:var(--bcm-accent-2); fill:none; stroke-width:2; flex:none; }
+      .webonly-note {
+        display:flex; gap:.5em; align-items:flex-start; font-size:.8em; opacity:.75; line-height:1.5;
+        margin:.5em 0 0 1.9em; padding:.6em .8em; background:hsla(var(--bcm-accent-h), var(--bcm-accent-s), var(--bcm-accent-l), 0.08); border:1px solid hsla(var(--bcm-accent-h), var(--bcm-accent-s), var(--bcm-accent-l), 0.25); border-radius:6px;
+      }
+      .webonly-note svg { width:14px; height:14px; stroke:var(--bcm-accent-2); fill:none; stroke-width:2; flex:none; margin-top:.15em; }
+
+      /* Scheduled Cleanup */
+      .storage-box { display:flex; flex-wrap:wrap; gap:.3em 1.2em; font-size:.82em; opacity:.85; background:rgba(0,0,0,0.12); border-radius:6px; padding:.7em .9em; margin-bottom:1.3em; }
+      .storage-box b { opacity:.95; }
+      .cleanup-field { margin-bottom:1.3em; padding-bottom:1.2em; border-bottom:1px dashed var(--bcm-border); }
+      .cleanup-field:last-of-type { border-bottom:none; margin-bottom:1em; padding-bottom:0; }
+      .field-sentence { font-size:.92em; line-height:1.65; margin:0 0 .8em; }
+      .field-sentence input[type=number] {
+        width:56px; box-sizing:border-box; padding:.3em .4em; font-size:.95em; border-radius:4px;
+        border:1px solid var(--bcm-border); background:rgba(0,0,0,0.15); color:inherit; text-align:center;
+      }
+      .type-checks { display:flex; flex-wrap:wrap; gap:.5em .9em; margin:0 0 .9em; padding:.7em .8em; background:rgba(0,0,0,0.12); border-radius:6px; }
+      .type-checks label { display:flex; align-items:center; gap:.4em; font-size:.82em; opacity:.9; cursor:pointer; margin:0; }
+      .type-checks input { width:14px; height:14px; accent-color:var(--bcm-accent); cursor:pointer; margin:0; }
+      .type-checks-title { flex-basis:100%; font-size:.78em; opacity:.6; margin-bottom:.1em; }
+      .cleanup-field-actions { display:flex; justify-content:flex-end; }
+      .bcm-btn.cleannow { background:rgba(220,120,0,0.15); color:#f0a75f; border:1px solid rgba(220,120,0,0.5); }
+
+      /* ---------- tile homepage ---------- */
+      .tile-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:1em; margin-bottom:1.8em; }
+      @media (max-width:720px) { .tile-grid { grid-template-columns:repeat(2, 1fr); } }
+      .tile {
+        position:relative; border-radius:14px; padding:1.3em 1em 1em; cursor:pointer;
+        display:flex; flex-direction:column; align-items:center; gap:.6em; text-align:center;
+        border:1px solid rgba(255,255,255,0.08); transition:transform .12s ease, box-shadow .12s ease;
+        color:#fff; user-select:none;
+      }
+      .tile:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,0.35); }
+      .tile:active { transform:translateY(0); }
+      .tile.dragging { opacity:.4; }
+      .tile.drag-over { outline:2px dashed #fff; outline-offset:2px; }
+      .tile-icon { width:30px; height:30px; stroke:#fff; fill:none; stroke-width:1.8; }
+      .tile-icon svg { width:100%; height:100%; display:block; }
+      .tile-label { font-size:.88em; font-weight:600; line-height:1.25; }
+      .tile-badge {
+        position:absolute; top:-6px; right:-6px;
+        background:#e0473f; color:#fff; font-size:.72em; font-weight:700;
+        min-width:20px; height:20px; border-radius:99px; display:flex; align-items:center; justify-content:center;
+        padding:0 .4em; border:2px solid rgba(0,0,0,0.35);
+      }
+      /* Light ring plus a thin dark outline: stays visible on any tile colour (e.g. a green dot
+         on green accent tiles, or on light Pastel tiles). */
+      .tile-badge.dot { min-width:12px; height:12px; padding:0; border-color:rgba(255,255,255,0.9); box-shadow:0 0 0 1px rgba(0,0,0,0.35); }
+      /* Green = the tile's automation/toggle is currently on (or, for the Timer tile, a
+         countdown is running or scheduled); grey/muted = currently off. Used by Media News,
+         Welcome Message and Scheduled Cleanup (which always show one or the other, reflecting
+         their persistent on/off config) and by Timer (which only ever shows the green variant,
+         since "off" is just its normal resting state, not a toggle to remind the admin about). */
+      .tile-badge.dot.green { background:#3ecf6d; }
+      .tile-badge.dot.muted { background:#94A3B8; }
+      .tile-countdown {
+        font-size:.78em; font-weight:700; letter-spacing:.02em;
+        background:rgba(0,0,0,0.28); padding:.15em .55em; border-radius:99px;
+        display:flex; align-items:center; gap:.35em;
+      }
+      .tile-countdown .pulse-dot { width:6px; height:6px; border-radius:50%; background:#7ddc7d; animation:bcm-pulse 1.4s infinite; }
+      @keyframes bcm-pulse { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+
+      /* muted, distinct per-tile colours (scheme "Colourful", see TILE_DEFAULT_COLORS in app.js) */
+      .tile.c-updates    { background:linear-gradient(160deg, #5b6875, #4a5560); }
+      .tile.c-instant    { background:linear-gradient(160deg, #4f8fd1, #3d70a8); }
+      .tile.c-scheduled  { background:linear-gradient(160deg, #8b6fd1, #6d54a8); }
+      .tile.c-timer      { background:linear-gradient(160deg, #d1854f, #a8683d); }
+      .tile.c-medianews  { background:linear-gradient(160deg, #d1607a, #a84a61); }
+      .tile.c-welcome    { background:linear-gradient(160deg, #5fae7a, #498a60); }
+      .tile.c-history    { background:linear-gradient(160deg, #4fb8c4, #3d939c); }
+      .tile.c-cleanup    { background:linear-gradient(160deg, #b5954f, #91773e); }
+      .tile.c-groups     { background:linear-gradient(160deg, #5fae9a, #45947f); }
+      .tile.c-system     { background:linear-gradient(160deg, #6870c9, #5158a3); }
+      /* Same columns and order as the tile grid (.tile-grid), so the list reads like the homepage. */
+      .tilecolor-list { display:grid; grid-template-columns:repeat(4, 1fr); gap:.5em .9em; margin:.8em 0; }
+      @media (max-width:720px) { .tilecolor-list { grid-template-columns:repeat(2, 1fr); } }
+      .tilecolor-row { display:flex; align-items:center; gap:.4em; min-width:0; }
+      .tilecolor-swatch { flex:1; min-width:0; align-self:stretch; display:flex; align-items:center; border-radius:8px; padding:.45em .65em; font-size:.8em; font-weight:600; line-height:1.25; color:#fff; border:1px solid rgba(255,255,255,0.08); overflow-wrap:anywhere; }
+      .tilecolor-row input[type=color] { width:40px; height:32px; padding:2px; border:1px solid var(--bcm-border); border-radius:6px; background:none; cursor:pointer; flex:none; }
+      .tilecolor-reset { flex:none; visibility:hidden; }
+      .tilecolor-row { border-radius:8px; }
+      .tilecolor-row .tilecolor-swatch { cursor:grab; }
+      .tilecolor-row.dragging { opacity:.4; }
+      .tilecolor-row.drag-over { outline:2px dashed var(--bcm-accent); outline-offset:2px; }
+      .tilecolor-row.custom .tilecolor-reset { visibility:visible; }
+      /* light tile colours (e.g. Pastel) switch to dark text so labels stay readable */
+      .tile.tile-dark-text, .tilecolor-swatch.tile-dark-text { color:#1d1d1d; }
+      .tile.tile-dark-text .tile-icon { stroke:#1d1d1d; }
+      .tile.c-settings   { background:linear-gradient(160deg, #b05fa8, #8c4b86); }
+
+      /* ---------- User Groups tile ---------- */
+      .group-item {
+        display:flex; justify-content:space-between; align-items:center; gap:1em;
+        border:1px solid var(--bcm-border); border-radius:8px; padding:.75em 1em; margin-bottom:.6em;
+        background:var(--bcm-fill);
+      }
+      .group-main { display:flex; flex-direction:column; gap:.2em; }
+      .group-name { font-weight:600; font-size:.98em; }
+      .group-members { font-size:.82em; opacity:.6; }
+      .group-actions { display:flex; gap:.5em; flex:none; }
+      .bcm-btn.small { padding:.35em .8em; font-size:.85em; }
+      .bcm-btn.danger { background:rgba(180,30,30,0.15); color:#ff8787; border:1px solid rgba(180,30,30,0.5); }
+      /* The light pink text above is made for dark themes - too faint on a light background. */
+      .bcm-light-bg .bcm-btn.danger { background:rgba(179,38,30,0.08); color:#b3261e; border-color:rgba(179,38,30,0.55); }
+      .group-form {
+        border:1px dashed var(--bcm-border); border-radius:8px; padding:1em 1.1em; margin-bottom:1.2em;
+        background:hsla(var(--bcm-accent-h), var(--bcm-accent-s), var(--bcm-accent-l), 0.05); display:none;
+      }
+      .group-form.show { display:block; }
+      .group-form-title { font-size:.9em; font-weight:600; opacity:.85; margin:0 0 .8em; }
+
+      /* Two-part "Groups" / "Individual users" checkbox list - used inside every
+         "Selected users & groups" .bcm-userlist (Instant/Scheduled/Timer/Media News/System
+         Message). */
+      .userlist-subtitle { font-size:.72em; font-weight:700; text-transform:uppercase; letter-spacing:.03em; opacity:.5; margin:.5em 0 .25em; }
+      .userlist-subtitle:first-child { margin-top:0; }
+      .userlist-empty-note { font-size:.82em; opacity:.45; margin:0 0 .4em; }
+      .group-chip { font-size:.72em; opacity:.5; margin-left:.4em; }
+      /* Last item of the recipient radio row, right next to "Selected users & groups". A flex
+         item of .bcm-radio-group (not inside the label), so clicking it never toggles the radio;
+         wraps to its own line on narrow screens. */
+      .manage-groups-link { display:inline-flex; align-items:center; margin:0; }
+
+      .open-orders { margin-top:.4em; }
+      .open-orders h3 { font-size:.95em; margin:0 0 .6em; opacity:.8; font-weight:600; }
+      .open-order-item {
+        display:flex; justify-content:space-between; align-items:center; gap:1em;
+        border:1px solid var(--bcm-border); border-radius:6px; padding:.6em .9em; margin-bottom:.5em;
+        background:var(--bcm-fill); font-size:.85em; cursor:pointer;
+      }
+      .open-order-item:hover { background:var(--bcm-fill-strong); }
+      .open-order-item .oo-main { display:flex; flex-direction:column; gap:.15em; }
+      .open-order-item .oo-title { font-weight:600; }
+      .open-order-item .oo-sub { opacity:.6; font-size:.85em; }
+      .open-order-item .oo-arrow { opacity:.4; font-size:.9em; white-space:nowrap; }
+
+      .bcm-detail-header { display:flex; align-items:center; gap:.7em; margin-bottom:1.2em; }
+      /* Made larger/more prominent than the original subtle version (font-size .9em, no border,
+         only a background on hover) - the admin repeatedly mis-clicked Emby's own smaller "<"
+         page-level back arrow just above this one instead. A visible resting border + bigger
+         everything (font, padding, arrow) makes this read clearly as its own button at a glance,
+         not just as text. */
+      .bcm-back-link { display:flex; align-items:center; gap:.5em; cursor:pointer; opacity:.9; font-size:1.05em; font-weight:600; padding:.5em .9em; border-radius:8px; border:1px solid var(--bcm-border); background:var(--bcm-fill); }
+      .bcm-back-link:hover { opacity:1; background:var(--bcm-fill-strong); }
+      /* Chevron icon as SVG - a font arrow glyph looks pixelated at this size. */
+      .bcm-back-link span[aria-hidden] { font-size:1.5em; line-height:1; display:inline-flex; }
+      .bcm-back-link svg { width:1.1em; height:1.1em; display:block; }
+      .bcm-detail-title { font-size:1.3em; font-weight:700; margin:0; }
+
+      /* Status/badge/history-tag text colors above are tuned for the dark theme (bright text on
+         a background that stays dark, since the colored fills are semi-transparent and blend
+         with whatever page background sits behind them). On a light page background those same
+         semi-transparent fills turn pastel/light, so the same bright text becomes low-contrast.
+         `bcm-light-bg` is added to the view root at runtime (see applyBackgroundAwareTheme() in
+         app.js, which measures the actual rendered page background rather than guessing at
+         an Emby theme name/class) - these overrides darken just the text for that case, leaving
+         the pill backgrounds/borders untouched. */
+      .bcm-light-bg .bcm-status.ok { color:#1a6b1a; }
+      .bcm-light-bg .bcm-status.err { color:#8a1f1f; }
+      .bcm-light-bg .bcm-history-tag { color:var(--bcm-accent-2); }
+      /* Per-user delivery pills in "Status & History" (.bcm-badge, see renderHistory() in
+         app.js): plain black text on the light theme - the tinted colours (esp. "pending" amber)
+         are too faint on the pastel pills there. Backgrounds/borders and the dark theme keep the
+         tinted colours. */
+      .bcm-light-bg .bcm-badge.delivered,
+      .bcm-light-bg .bcm-badge.pending,
+      .bcm-light-bg .bcm-badge.failed,
+      .bcm-light-bg .bcm-badge.expired { color:#111; }
+
+      /* Plugin Updates' GitHub project-page link - previously unstyled, so it fell back to the
+         browser's default (visited) link purple, which was nearly invisible against the dark
+         theme's dark card background. Dark theme gets the same bright accent already used
+         elsewhere for links/icons on dark (.bcm-history-tag text, .webonly-icon); light theme
+         gets a plain, more traditional link blue with enough contrast against a light card. */
+      .bcm-inline-note a, .bcm-inline-note a:visited { color:var(--bcm-accent-2); }
+      .bcm-inline-note a:hover { opacity:.85; }
+      .bcm-light-bg .bcm-inline-note a, .bcm-light-bg .bcm-inline-note a:visited { color:var(--bcm-accent-2); }
+
+      /* Native <select> dropdown popup (Timer's "Action after countdown ends" and Media News'
+         auto-send weekday picker are the only two on this page) -
+         previously unstyled <option>s, so the popup fell back to the browser/OS default, which on
+         the dark theme showed the currently-highlighted row with a light system-accent background
+         and this page's own inherited white option text on top of it - unreadable. Giving <option>
+         its own explicit background/color (which Chromium/Edge do honor, including for the
+         highlighted row) fixes this on both themes; light theme is included too so it doesn't
+         accidentally start relying on the same OS default that just broke here. */
+      .bcm-field select option { background:#20242b; color:#eee; }
+      .bcm-field select option:checked, .bcm-field select option:hover { background:var(--bcm-accent); color:var(--bcm-on-accent); }
+      .bcm-light-bg .bcm-field select option { background:#fff; color:#111; }
+      .bcm-light-bg .bcm-field select option:checked, .bcm-light-bg .bcm-field select option:hover { background:var(--bcm-accent); color:var(--bcm-on-accent); }
+
+      /* "Welcome Message"'s two action buttons ("Mark existing users..." / "Reset welcomed
+         users") each paired with their own explanatory note directly underneath, side-by-side as
+         two flex columns, so it is clear which note belongs to which button. flex-wrap stacks the
+         columns on narrow screens. */
+      .welcome-action-cols { display:flex; gap:1.5em; flex-wrap:wrap; margin-top:1.4em; padding-top:1.2em; border-top:1px dashed var(--bcm-border); }
+      .welcome-action-col { flex:1 1 220px; min-width:220px; display:flex; flex-direction:column; }
+      .welcome-action-col .bcm-btn { align-self:flex-start; margin-bottom:.5em; }
+      .welcome-action-col .bcm-inline-note { margin:0 0 .4em; }
+    </style>
+
+    <div class="bcm-page">
+
+      <div class="bcm-topbar">
+        <div>
+          <h1 class="bcm-title" data-i18n="pageTitle">EmbyCast</h1>
+          <p class="bcm-subtitle" data-i18n="pageSubtitle">Send messages to your users, right from the dashboard.</p>
+        </div>
+        <div class="bcm-langswitch">
+          <button type="button" class="bcm-langbtn" data-lang="en">EN</button>
+          <button type="button" class="bcm-langbtn" data-lang="de">DE</button>
+        </div>
+      </div>
+
+      <!-- ============ TILE HOMEPAGE (grid view) ============ -->
+      <div id="tileGridView">
+        <div class="tile-grid" id="tileGrid"></div>
+        <div class="bcm-status" id="tileOrderStatus"></div>
+        <div class="open-orders">
+          <h3 data-i18n="openOrdersTitle">Open items</h3>
+          <div id="openOrdersList"></div>
+        </div>
+      </div>
+
+      <!-- Shared back-link header, shown above whichever section is currently open. Always
+           present in the DOM (toggled via style.display), positioned immediately before all
+           .bcm-section blocks so it visually precedes whichever one is visible. -->
+      <div class="bcm-detail-header" id="bcmDetailHeader" style="display:none;">
+        <span class="bcm-back-link" id="bcmBackLink"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></span> <span class="bcm-back-label" data-i18n="backToOverview">Overview</span></span>
+        <span style="opacity:.4;">&middot;</span>
+        <h2 class="bcm-detail-title" id="bcmDetailTitle">-</h2>
+      </div>
+
+      <!-- ============ PLUGIN UPDATES ============ -->
+      <div class="bcm-section" data-section="updates" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="updatesTitle">Plugin Updates</h2>
+        <p class="bcm-desc" data-i18n="updatesDesc">Check GitHub for a newer version of this plugin and install it with one click.</p>
+        <p class="bcm-inline-note"><span data-i18n="updatesGithubLink">Project page:</span> <a href="https://github.com/solistvbox-rgb/embycast" target="_blank" rel="noopener noreferrer">github.com/solistvbox-rgb/embycast</a></p>
+        <p class="bcm-inline-note updates-installed-version"></p>
+        <p class="bcm-inline-note updates-beta-note" data-i18n="updatesBetaOn" style="display:none;">Beta versions are offered (see Settings).</p>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn secondary update-check" data-i18n="btnCheckUpdate">Check for Updates</button>
+          <button type="button" class="bcm-btn update-install" data-i18n="btnInstallUpdate" style="display:none;">&#8659; Install Update</button>
+          <button type="button" class="bcm-btn secondary update-notes-toggle" style="display:none;"></button>
+        </div>
+        <div class="bcm-status update-status"></div>
+        <div class="update-notes" style="display:none;"></div>
+      </div>
+      </div>
+
+      <!-- ============ INSTANT MESSAGE ============ -->
+      <div class="bcm-section" data-section="instant" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="instantTitle">Instant Message</h2>
+
+        <div class="bcm-field">
+          <label data-i18n="labelDisplay">Display</label>
+          <div class="bcm-display-group instant-display-group">
+            <label class="bcm-display-opt"><input type="radio" name="instant-display" value="dialog" checked />
+              <span class="bcm-display-text"><b data-i18n="displayDialog">Dialog</b><small data-i18n="displayDialogDesc">Stays visible until the user presses "Got it". Title and line breaks are shown.</small></span></label>
+            <label class="bcm-display-opt"><input type="radio" name="instant-display" value="toast" />
+              <span class="bcm-display-text"><b data-i18n="displayToast">Short pop-up</b><small data-i18n="displayToastDesc">Disappears by itself after about 3 seconds. Text only - no title, all on one line.</small></span></label>
+          </div>
+          <p class="bcm-inline-note bcm-toast-note instant-toast-note" data-i18n="noteToast" style="display:none">Line breaks are shown as " · ". Keep it short - on most Emby apps it is visible for about 3 seconds.</p>
+        </div>
+        <div class="bcm-field instant-header-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="instant-header" maxlength="80" value="Announcement" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessage">Message</label>
+          <textarea class="instant-text" maxlength="500" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelUserPreview">Preview for users</label>
+          <div class="bcm-user-preview instant-user-preview"></div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group instant-recipient-group">
+            <label><input type="radio" name="instant-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="instant-recipient" value="All" /> <span data-i18n="recipientAll">All users</span></label>
+            <label><input type="radio" name="instant-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
+          </div>
+          <div class="bcm-userlist instant-userlist"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn instant-send" data-i18n="btnSendNow">Send Now</button>
+          <span class="bcm-refresh-link instant-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status instant-status"></div>
+      </div>
+      </div>
+
+      <!-- ============ SCHEDULED MESSAGE ============ -->
+      <div class="bcm-section" data-section="scheduled" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="scheduledTitle">Scheduled Message</h2>
+        <p class="bcm-desc" data-i18n="scheduledDesc">Queue a message to be sent automatically at a future date and time.</p>
+
+        <div class="bcm-field">
+          <label data-i18n="labelDisplay">Display</label>
+          <div class="bcm-display-group scheduled-display-group">
+            <label class="bcm-display-opt"><input type="radio" name="scheduled-display" value="dialog" checked />
+              <span class="bcm-display-text"><b data-i18n="displayDialog">Dialog</b><small data-i18n="displayDialogDesc">Stays visible until the user presses "Got it". Title and line breaks are shown.</small></span></label>
+            <label class="bcm-display-opt"><input type="radio" name="scheduled-display" value="toast" />
+              <span class="bcm-display-text"><b data-i18n="displayToast">Short pop-up</b><small data-i18n="displayToastDesc">Disappears by itself after about 3 seconds. Text only - no title, all on one line.</small></span></label>
+          </div>
+          <p class="bcm-inline-note bcm-toast-note scheduled-toast-note" data-i18n="noteToast" style="display:none">Line breaks are shown as " · ". Keep it short - on most Emby apps it is visible for about 3 seconds.</p>
+        </div>
+        <div class="bcm-field scheduled-header-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="scheduled-header" maxlength="80" value="Announcement" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessage">Message</label>
+          <textarea class="scheduled-text" maxlength="500" data-i18n-placeholder="placeholderMessage" placeholder="Type your message here..."></textarea>
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelUserPreview">Preview for users</label>
+          <div class="bcm-user-preview scheduled-user-preview"></div>
+        </div>
+        <div class="bcm-row">
+          <div class="bcm-field">
+            <label data-i18n="labelDateTime">Date &amp; time</label>
+            <input type="datetime-local" class="scheduled-datetime" />
+          </div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group scheduled-recipient-group">
+            <label><input type="radio" name="scheduled-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="scheduled-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
+            <label><input type="radio" name="scheduled-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
+          </div>
+          <div class="bcm-userlist scheduled-userlist"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn scheduled-create" data-i18n="btnSchedule">Schedule Message</button>
+          <span class="bcm-refresh-link scheduled-cancel-edit" data-i18n="linkCancelEdit" style="display:none;">&#10005; Cancel edit</span>
+          <span class="bcm-refresh-link scheduled-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status scheduled-status"></div>
+
+        <div style="margin-top:1.4em;">
+          <h3 style="margin:0 0 .6em;font-size:.95em;opacity:.75;" data-i18n="scheduledUpcoming">Upcoming scheduled messages</h3>
+          <div class="scheduled-list"></div>
+        </div>
+      </div>
+      </div>
+
+      <!-- ============ TIMER / COUNTDOWN ============ -->
+      <div class="bcm-section" data-section="timer" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="timerTitle">Timer &amp; Server Countdown</h2>
+        <p class="bcm-desc" data-i18n="timerDesc">Announce a countdown (e.g. before a restart) with reminders sent at chosen minute marks. The session list is re-checked before every reminder, so users who log in mid-countdown still get the remaining reminders. Users who are not online don't get them later - countdown messages are never kept.</p>
+
+        <div class="bcm-field">
+          <label data-i18n="labelDisplay">Display</label>
+          <div class="bcm-display-group timer-display-group">
+            <label class="bcm-display-opt"><input type="radio" name="timer-display" value="dialog" />
+              <span class="bcm-display-text"><b data-i18n="displayDialog">Dialog</b><small data-i18n="displayDialogDesc">Stays visible until the user presses "Got it". Title and line breaks are shown.</small></span></label>
+            <label class="bcm-display-opt"><input type="radio" name="timer-display" value="toast" checked />
+              <span class="bcm-display-text"><b data-i18n="displayToast">Short pop-up</b><small data-i18n="displayToastDesc">Disappears by itself after about 3 seconds. Text only - no title, all on one line.</small></span></label>
+          </div>
+          <p class="bcm-inline-note bcm-toast-note timer-toast-note" data-i18n="noteToast" style="display:none">Line breaks are shown as " · ". Keep it short - on most Emby apps it is visible for about 3 seconds.</p>
+        </div>
+        <div class="bcm-field timer-header-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="timer-header" maxlength="80" value="Server Countdown" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessageTemplate">Message (use {minutes} as a placeholder)</label>
+          <textarea class="timer-text" maxlength="500">Countdown: {minutes} minute(s) remaining</textarea>
+        </div>
+
+        <div class="bcm-row">
+          <div class="bcm-field">
+            <label data-i18n="labelTotalMinutes">Total countdown (minutes)</label>
+            <input type="number" class="timer-total" value="60" min="1" max="1440" />
+          </div>
+        </div>
+
+        <div class="bcm-field timer-schedule-field">
+          <label style="display:flex;align-items:center;gap:.5em;cursor:pointer;">
+            <input type="checkbox" class="timer-schedule-enabled" />
+            <span data-i18n="labelScheduleTimer">Start later (pick a date &amp; time)</span>
+          </label>
+          <div class="timer-schedule-datetime-wrap" style="display:none;margin-top:.5em;">
+            <input type="datetime-local" class="timer-schedule-datetime" />
+          </div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelPresets">Reminder minute marks</label>
+          <div class="bcm-presets timer-preset-chips"></div>
+          <input type="text" class="timer-preset-custom" maxlength="200" placeholder="60,30,15,5,1" />
+          <p class="bcm-inline-note" data-i18n="presetsNote">Click a preset to toggle it, or type a custom comma-separated list above.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelPreview">Preview</label>
+          <div class="bcm-preview timer-preview"></div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelPostAction">Action after countdown ends</label>
+          <select class="timer-postaction">
+            <option value="None" data-i18n="postActionNone">None (message only)</option>
+            <option value="RestartServer" data-i18n="postActionRestart">Restart server (experimental)</option>
+            <option value="ShutdownServer" data-i18n="postActionShutdown">Shut down server (experimental)</option>
+          </select>
+          <p class="bcm-inline-note" data-i18n="postActionNote">Server actions depend on your Emby Server build and are marked experimental - see the plugin README.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group timer-recipient-group">
+            <label><input type="radio" name="timer-recipient" value="Active" checked /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="timer-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
+          </div>
+          <div class="bcm-userlist timer-userlist"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn timer-start" data-i18n="btnStartTimer">Start Timer</button>
+          <button type="button" class="bcm-btn secondary timer-cancel" data-i18n="btnCancelTimer">Cancel Timer</button>
+          <span class="bcm-refresh-link timer-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status timer-status"></div>
+
+        <div class="timer-upcoming-wrap" style="display:none;margin-top:1.4em;">
+          <h3 style="margin:0 0 .6em;font-size:.95em;opacity:.75;" data-i18n="timerUpcomingTitle">Upcoming Timer &amp; Server Countdown</h3>
+          <div class="timer-upcoming-list"></div>
+        </div>
+
+        <div class="timer-visual" style="display:none;margin-top:1.2em;">
+          <div class="bcm-countdown-visual timer-countdown-text">--:--:--</div>
+          <div class="bcm-countdown-bar-track"><div class="bcm-countdown-bar-fill"></div></div>
+        </div>
+      </div>
+      </div>
+
+      <!-- ============ MEDIA NEWS ============ -->
+      <div class="bcm-section" data-section="medianews" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="mediaNewsTitle">Media News</h2>
+        <p class="bcm-desc" data-i18n="mediaNewsDesc">Announce recently added movies and TV shows.</p>
+
+        <div class="bcm-row">
+          <div class="bcm-field">
+            <label data-i18n="labelHeader">Header</label>
+            <input type="text" class="medianews-header" maxlength="80" value="What's New" />
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelLookbackDays">Look back (days)</label>
+            <input type="number" class="medianews-days" value="7" min="1" max="90" />
+          </div>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelLibraries">Libraries</label>
+          <div class="bcm-userlist show medianews-libraries"></div>
+          <p class="bcm-inline-note" data-i18n="librariesNote">Libraries with a content type such as audiobooks, books or music cannot be used for Media News and are not listed here.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelSeriesMode">Series entries</label>
+          <div class="bcm-radio-group medianews-seriesmode-checks">
+            <label><input type="checkbox" class="medianews-include-series" checked /> <span data-i18n="seriesModeNewSeries">Newly added series</span></label>
+            <label><input type="checkbox" class="medianews-include-episodes" /> <span data-i18n="seriesModeNewEpisodes">New episodes</span></label>
+          </div>
+        </div>
+
+        <div class="bcm-field medianews-episode-template-field" style="display:none;">
+          <label data-i18n="labelEpisodeTemplate">Episode format</label>
+          <input type="text" class="medianews-episode-template" maxlength="200" value="{Series name (year)} - {SxxExx} - {Episode title}" />
+          <div class="bcm-presets medianews-placeholder-chips">
+            <span class="bcm-preset-chip" data-placeholder="{Series name (year)}">{Series name (year)}</span>
+            <span class="bcm-preset-chip" data-placeholder="{SxxExx}">{SxxExx}</span>
+            <span class="bcm-preset-chip" data-placeholder="{Episode title}">{Episode title}</span>
+          </div>
+          <p class="bcm-inline-note" data-i18n="episodeTemplateNote">Click a placeholder to insert it at the cursor position.</p>
+        </div>
+
+        <div class="bcm-field">
+          <label data-i18n="labelRecipients">Recipients</label>
+          <div class="bcm-radio-group medianews-recipient-group">
+            <label><input type="radio" name="medianews-recipient" value="Active" /> <span data-i18n="recipientActive">Active users</span></label>
+            <label><input type="radio" name="medianews-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
+            <label><input type="radio" name="medianews-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users</span></label>
+            <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
+          </div>
+          <div class="bcm-userlist medianews-userlist"></div>
+
+          <div class="webonly-row">
+            <input type="checkbox" class="medianews-webonly" id="medianews-webonly" />
+            <label for="medianews-webonly">
+              <svg class="webonly-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+              <span data-i18n="labelWebOnly">Send only to web-browser sessions</span>
+            </label>
+          </div>
+          <div class="webonly-note">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.3" r=".4" style="fill:var(--bcm-accent-2)" stroke="none"/></svg>
+            <span data-i18n="webOnlyNote">Useful for long Media News lists, which often don't fit well on phone or TV apps. Users without an active web-browser session don't get it right away: the message is kept and delivered automatically the next time they log in via a web browser (only if "Offline delivery" is switched on in Settings). Kept messages are deleted after the number of days set in the "Scheduled Cleanup" tile (default: 7) – users who haven't logged in via a web browser by then won't get it.</span>
+          </div>
+        </div>
+
+        <div class="bcm-preview medianews-preview" style="display:none;"></div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn secondary medianews-preview-btn">Preview</button>
+          <button type="button" class="bcm-btn medianews-send" data-i18n="btnSendMediaNewsNow">Send Media News Now</button>
+          <span class="bcm-refresh-link medianews-refresh-users" data-i18n="refreshUsers">&#8635; Refresh user list</span>
+        </div>
+        <div class="bcm-status medianews-status"></div>
+
+        <hr style="margin:1.6em 0;border:none;border-top:1px solid var(--bcm-border);" />
+
+        <div class="bcm-toggle-row">
+          <input type="checkbox" class="medianews-auto-enabled" />
+          <label for="" data-i18n="labelAutoSend" style="margin:0;">Send automatically every 7 days</label>
+        </div>
+
+        <div class="bcm-row medianews-auto-fields">
+          <div class="bcm-field">
+            <label data-i18n="labelWeekday">Weekday</label>
+            <select class="medianews-auto-day">
+              <option value="Monday" data-i18n="dayMonday">Monday</option>
+              <option value="Tuesday" data-i18n="dayTuesday">Tuesday</option>
+              <option value="Wednesday" data-i18n="dayWednesday">Wednesday</option>
+              <option value="Thursday" data-i18n="dayThursday">Thursday</option>
+              <option value="Friday" data-i18n="dayFriday" selected>Friday</option>
+              <option value="Saturday" data-i18n="daySaturday">Saturday</option>
+              <option value="Sunday" data-i18n="daySunday">Sunday</option>
+            </select>
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelTime">Time</label>
+            <input type="time" class="medianews-auto-time" value="18:00" />
+          </div>
+        </div>
+
+        <div class="bcm-preview medianews-auto-preview" style="display:none;"></div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn secondary medianews-auto-preview-btn">Preview</button>
+          <button type="button" class="bcm-btn secondary medianews-auto-save" data-i18n="btnSaveAutoSettings">Save Auto-send Settings</button>
+        </div>
+        <div class="bcm-status medianews-auto-status"></div>
+        <p class="bcm-inline-note medianews-next-run" data-i18n="nextRunUnknown">Next scheduled send: unknown</p>
+        <div class="medianews-auto-upcoming" style="display:none;margin-top:.6em;"></div>
+      </div>
+      </div>
+
+      <!-- ============ USER GROUPS ============ -->
+      <div class="bcm-section" data-section="groups" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="groupsTitle">User Groups</h2>
+        <p class="bcm-desc" data-i18n="groupsDesc">Combine several users into a named group to quickly select them together as message recipients.</p>
+
+        <div class="group-list"></div>
+
+        <!-- Same form for "New group" and "Edit group" - only the title/prefilled values differ,
+             see openGroupForm() in app.js. -->
+        <div class="group-form">
+          <p class="group-form-title"></p>
+          <div class="bcm-field">
+            <label data-i18n="labelGroupName">Group name</label>
+            <input type="text" class="group-form-name" maxlength="80" />
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelGroupMembers">Members</label>
+            <div class="bcm-userlist show group-form-userlist"></div>
+          </div>
+          <div class="bcm-btnrow">
+            <button type="button" class="bcm-btn group-form-save" data-i18n="btnSaveGroup">Save</button>
+            <button type="button" class="bcm-btn secondary group-form-cancel" data-i18n="msgCancel">Cancel</button>
+          </div>
+          <div class="bcm-status group-form-status"></div>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn group-new" data-i18n="btnNewGroup">+ New Group</button>
+        </div>
+        <div class="bcm-status groups-status"></div>
+      </div>
+      </div>
+
+      <!-- ============ WELCOME MESSAGE ============ -->
+      <div class="bcm-section" data-section="welcome" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="welcomeTitle">Welcome Message</h2>
+        <p class="bcm-desc" data-i18n="welcomeDesc">Automatically sent the first time a user ever logs in.</p>
+
+        <div class="bcm-field">
+          <label data-i18n="labelHeader">Header</label>
+          <input type="text" class="welcome-header" maxlength="80" value="Welcome!" />
+        </div>
+        <div class="bcm-field">
+          <label data-i18n="labelMessage">Message</label>
+          <textarea class="welcome-text" maxlength="500">Welcome to our media server - enjoy your stay!</textarea>
+        </div>
+
+        <!-- No separate Save/Turn off buttons - flipping the switch saves
+             Header/Message together with the new enabled state immediately and starts/stops
+             sending right away. To apply an edited Header/Message while staying enabled, flip
+             the switch off and back on - each flip is itself a save of whatever is currently in
+             the fields. -->
+        <div class="bcm-toggle-row">
+          <label class="bcm-switch">
+            <input type="checkbox" class="welcome-enabled" />
+            <span class="bcm-switch-slider"></span>
+          </label>
+          <label style="margin:0;" data-i18n="labelEnableWelcome">Enable welcome message</label>
+        </div>
+        <p class="bcm-inline-note" data-i18n="noteWelcomeFirstActivation">The first time you enable this, every existing user gets the message at their next login. After that, only users logging in for the very first time receive it - editing the text or toggling it off and on again does not resend it to anyone already welcomed.</p>
+        <div class="bcm-status welcome-status"></div>
+
+        <div class="welcome-action-cols">
+          <div class="welcome-action-col">
+            <button type="button" class="bcm-btn secondary welcome-mark-existing" data-i18n="btnMarkExistingUsers">Mark existing users as already welcomed</button>
+            <p class="bcm-inline-note" data-i18n="noteMarkExistingUsers">Skips every user who already exists right now, so only users created from this point on receive the welcome message. Safe to click any time, including more than once - already-marked users are simply skipped again.</p>
+            <p class="bcm-inline-note welcome-mark-lastrun" style="display:none;"></p>
+          </div>
+          <div class="welcome-action-col">
+            <button type="button" class="bcm-btn secondary welcome-unmark-existing" data-i18n="btnUnmarkExistingUsers">Reset welcomed users</button>
+            <p class="bcm-inline-note" data-i18n="noteUnmarkExistingUsers">Clears the welcomed-users list and turns off "Enable welcome message", so nothing is sent out immediately. Every current user will then receive the welcome message again once you turn it back on, the next time each of them logs in.</p>
+            <p class="bcm-inline-note welcome-unmark-lastrun" style="display:none;"></p>
+          </div>
+        </div>
+        <div class="bcm-status welcome-mark-status"></div>
+      </div>
+      </div>
+
+      <!-- ============ STATUS & HISTORY ============ -->
+      <div class="bcm-section" data-section="history" style="display:none;">
+      <div class="bcm-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3em;gap:1em;flex-wrap:wrap;">
+          <h2 style="margin:0;" data-i18n="historyTitle">Status &amp; History</h2>
+          <div style="display:flex;gap:1em;align-items:center;">
+            <span class="bcm-refresh-link history-refresh" data-i18n="refreshHistory">&#8635; Refresh</span>
+            <span class="bcm-refresh-link history-clear-all" data-i18n="clearAllHistory">&#10005; Discard all</span>
+          </div>
+        </div>
+        <p class="bcm-desc" data-i18n="historyDesc">Every message this plugin has sent, with per-user delivery status. Green = delivered, yellow = pending (offline, will be delivered at next login), red = failed, grey = expired (not delivered in time).</p>
+        <div class="bcm-status history-status"></div>
+        <div class="history-list"></div>
+      </div>
+      </div>
+
+      <!-- ============ SCHEDULED CLEANUP ============ -->
+      <div class="bcm-section" data-section="cleanup" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="cleanupTitle">Scheduled Cleanup</h2>
+        <p class="bcm-desc" data-i18n="cleanupDesc">Automatically cleans up undelivered messages and old history entries. Undelivered (offline) messages only exist when "Offline delivery" is switched on in Settings.</p>
+
+        <div class="storage-box cleanup-storage-box"></div>
+
+        <div class="cleanup-field">
+          <p class="field-sentence">
+            <span data-i18n="cleanupOfflinePrefix">Offline messages are marked "Expired" and removed from the queue after</span>
+            <input type="number" class="cleanup-offline-days" min="1" max="365" value="7" />
+            <span data-i18n="cleanupOfflineSuffix">day(s).</span>
+          </p>
+          <div class="cleanup-field-actions">
+            <button type="button" class="bcm-btn cleannow cleanup-purge-offline" data-i18n="btnPurgeOffline">Delete all undelivered messages</button>
+          </div>
+        </div>
+
+        <div class="cleanup-field">
+          <p class="field-sentence">
+            <span data-i18n="cleanupHistoryPrefix">All selected history entries below are deleted after</span>
+            <input type="number" class="cleanup-history-days" min="1" max="365" value="14" />
+            <span data-i18n="cleanupHistorySuffix">day(s). Scheduled Messages and the Media News automation (weekly job) are not affected by this.</span>
+          </p>
+
+          <div class="type-checks cleanup-type-checks">
+            <span class="type-checks-title" data-i18n="cleanupTypesTitle">Affected message types:</span>
+            <label><input type="checkbox" class="cleanup-type-instant" checked /> <span data-i18n="typeInstant">Instant Message</span></label>
+            <label><input type="checkbox" class="cleanup-type-scheduled" checked /> <span data-i18n="typeScheduled">Scheduled Message</span></label>
+            <label><input type="checkbox" class="cleanup-type-timer" checked /> <span data-i18n="typeTimer">Timer &amp; Countdown</span></label>
+            <label><input type="checkbox" class="cleanup-type-medianews" checked /> <span data-i18n="typeMediaNews">Media News</span></label>
+            <label><input type="checkbox" class="cleanup-type-welcome" checked /> <span data-i18n="typeWelcome">Welcome Message</span></label>
+            <label><input type="checkbox" class="cleanup-type-offline" checked /> <span data-i18n="typeOffline">Offline</span></label>
+            <label><input type="checkbox" class="cleanup-type-system" checked /> <span data-i18n="typeSystem">System Message</span></label>
+          </div>
+
+          <div class="cleanup-field-actions">
+            <button type="button" class="bcm-btn cleannow cleanup-purge-history" data-i18n="btnPurgeHistory">Delete history now</button>
+          </div>
+        </div>
+
+        <div class="cleanup-field">
+          <p class="field-sentence">
+            <span data-i18n="cleanupMaxEntriesPrefix">The history list is additionally capped at</span>
+            <input type="number" class="cleanup-history-max-entries" min="20" max="5000" value="300" />
+            <span data-i18n="cleanupMaxEntriesSuffix">entrie(s) - the oldest are removed automatically as soon as a new one is added, regardless of the schedule above.</span>
+          </p>
+        </div>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn cleanup-save" data-i18n="btnSaveCleanup">Save Settings</button>
+          <label class="bcm-switch" style="margin-left:.6em;">
+            <input type="checkbox" class="cleanup-enabled" />
+            <span class="bcm-switch-slider"></span>
+          </label>
+          <label style="margin:0;" data-i18n="labelEnableCleanup">Automatic cleanup active</label>
+        </div>
+        <p class="bcm-inline-note" data-i18n="noteCleanupToggleIndependent">This switch turns the automatic daily cleanup on/off immediately by itself, separately from "Save Settings" (which only stores the fields above). The two "Delete now" buttons above always work regardless of this switch.</p>
+        <div class="bcm-status cleanup-status"></div>
+      </div>
+      </div>
+
+      <div class="bcm-section" data-section="system" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="systemTitle">System Message</h2>
+        <p class="bcm-desc" data-i18n="systemDesc">Show Emby server events - e.g. logins, failed logins, new media, failed scheduled tasks or plugin updates - as a dialog or short pop-up on the active Emby sessions of the selected administrators.</p>
+
+        <div class="bcm-btnrow">
+          <button type="button" class="bcm-btn sysmsg-new" data-i18n="btnNewSystemMessage">New System Message</button>
+        </div>
+
+        <div class="group-form sysmsg-form">
+          <p class="group-form-title sysmsg-form-title"></p>
+          <div class="bcm-field">
+            <label data-i18n="labelSystemName">Name</label>
+            <input type="text" class="sysmsg-name" maxlength="80" />
+          </div>
+          <div class="bcm-btnrow sysmsg-enabled-row">
+            <label class="bcm-switch">
+              <input type="checkbox" class="sysmsg-enabled" checked />
+              <span class="bcm-switch-slider"></span>
+            </label>
+            <label style="margin:0;" data-i18n="labelSystemEnabled">Active</label>
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelDisplay">Display</label>
+            <div class="bcm-display-group sysmsg-display-group">
+              <label class="bcm-display-opt"><input type="radio" name="sysmsg-display" value="toast" checked />
+                <span class="bcm-display-text"><b data-i18n="displayToast">Short pop-up</b><small data-i18n="displayToastDesc">Disappears by itself after about 3 seconds. Text only - no title, all on one line.</small></span></label>
+              <label class="bcm-display-opt"><input type="radio" name="sysmsg-display" value="dialog" />
+                <span class="bcm-display-text"><b data-i18n="displayDialog">Dialog</b><small data-i18n="displayDialogDesc">Stays visible until the user presses "Got it". Title and line breaks are shown.</small></span></label>
+            </div>
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelSystemAdmins">Administrators</label>
+            <div class="type-checks sysmsg-admins"></div>
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelSystemEvents">Events</label>
+            <div class="sysmsg-events"></div>
+          </div>
+          <div class="bcm-field">
+            <label data-i18n="labelSystemUsers">Limit user events to</label>
+            <div class="bcm-radio-group sysmsg-recipient-group">
+              <label><input type="radio" name="sysmsg-recipient" value="All" checked /> <span data-i18n="recipientAll">All users</span></label>
+              <label><input type="radio" name="sysmsg-recipient" value="Specific" /> <span data-i18n="recipientSpecific">Selected users &amp; groups</span></label>
+              <span class="bcm-refresh-link manage-groups-link" data-i18n="manageGroupsLink">&#9998; Manage groups</span>
+            </div>
+            <div class="bcm-userlist sysmsg-userlist"></div>
+            <p class="bcm-inline-note" data-i18n="noteSystemUsers">Applies to events caused by a user (playback, logins, favourites, ...). Events without a user - backups, scheduled tasks, plugins - are always shown.</p>
+          </div>
+          <div class="bcm-btnrow">
+            <button type="button" class="bcm-btn sysmsg-save" data-i18n="btnSystemSave">Save</button>
+            <button type="button" class="bcm-btn secondary sysmsg-cancel" data-i18n="btnSystemCancel">Cancel</button>
+          </div>
+          <div class="bcm-status sysmsg-form-status"></div>
+        </div>
+
+        <div class="sysmsg-list"></div>
+        <div class="bcm-status sysmsg-status"></div>
+
+        <p class="bcm-inline-note" data-i18n="systemNote">Only administrators can receive System Messages, and only on sessions that are active at that moment - nothing is kept for later. Administrators are not told about their own actions (e.g. their own playback or login), except failed logins and lock-outs of their account. The texts come from Emby itself. Note: "Scheduled Task Completed" fires for every task Emby runs, including several right after each server start. Delivered messages appear in Status &amp; History as "System Message".</p>
+      </div>
+      </div>
+
+      <div class="bcm-section" data-section="settings" style="display:none;">
+      <div class="bcm-card">
+        <h2 data-i18n="settingsTitle">Settings</h2>
+        <p class="bcm-desc" data-i18n="settingsDesc">General options for EmbyCast.</p>
+
+        <div class="bcm-field">
+          <label data-i18n="labelLogLevel">Logging (Emby server log)</label>
+          <select class="settings-loglevel">
+            <option value="Nothing" data-i18n="logLevelNothing">Nothing</option>
+            <option value="ErrorsOnly" data-i18n="logLevelErrorsOnly">Errors only</option>
+            <option value="ErrorsAndWarnings" data-i18n="logLevelErrorsAndWarnings">Errors and warnings (default)</option>
+            <option value="Verbose" data-i18n="logLevelVerbose">Verbose - everything</option>
+          </select>
+          <p class="bcm-inline-note" data-i18n="noteLogLevel">How much EmbyCast writes to the Emby server log. "Verbose" additionally logs every message sent, Media News queries including library folder paths, and the cleanup of deleted users - meant for troubleshooting. Takes effect immediately after saving. Requests that Emby itself rejects are still logged by Emby, regardless of this setting.</p>
+        </div>
+
+        <hr class="settings-sep" />
+        <div class="bcm-btnrow">
+          <label class="bcm-switch">
+            <input type="checkbox" class="settings-offline" checked />
+            <span class="bcm-switch-slider"></span>
+          </label>
+          <label style="margin:0;" data-i18n="labelOfflineDelivery">Offline delivery</label>
+        </div>
+        <p class="bcm-inline-note" data-i18n="noteOfflineDelivery">Keep messages for users who are not online (recipients "All users" or "Selected users &amp; groups") and deliver them at their next login. Kept messages are deleted after the number of days set in the "Scheduled Cleanup" tile (default: 7) and then recorded as "Expired". When switched off, such messages are recorded as "Failed" in Status &amp; History. "Active users", Timer &amp; Server Countdown and System Message never keep messages for later.</p>
+
+        <hr class="settings-sep" />
+        <div class="bcm-btnrow">
+          <label class="bcm-switch">
+            <input type="checkbox" class="settings-prerelease" />
+            <span class="bcm-switch-slider"></span>
+          </label>
+          <label style="margin:0;" data-i18n="labelPreReleases">Offer beta versions</label>
+        </div>
+        <p class="bcm-inline-note" data-i18n="notePreReleases">The update check in "Plugin Updates" also offers pre-releases (betas) from GitHub. Betas may contain bugs - only switch this on if you want to test new versions early. A newer stable version is always offered, even with this switched off. Takes effect after saving.</p>
+
+        <hr class="settings-sep" />
+        <div class="bcm-field">
+          <label data-i18n="labelTileColors">Tile colours</label>
+          <select class="settings-tile-scheme">
+            <option value="Default" data-i18n="tileSchemeDefault">Colourful (default)</option>
+            <option value="Accent" data-i18n="tileSchemeAccent">Emby accent colour</option>
+            <option value="Neutral" data-i18n="tileSchemeNeutral">Neutral grey</option>
+            <option value="Pastel" data-i18n="tileSchemePastel">Pastel</option>
+          </select>
+          <div class="tilecolor-list"></div>
+          <button type="button" class="bcm-btn secondary small tilecolor-reset-all" data-i18n="btnTileColorsReset">Reset all tile colours</button>
+          <p class="bcm-inline-note" data-i18n="noteTileColors">Pick a scheme, then change single tiles if you like - a changed tile keeps its colour when you switch the scheme. "Emby accent colour" follows Emby's accent setting. Saved with "Save Settings" and used for all administrators. Drag a tile to change the order - like on the homepage, the order is saved right away.</p>
+        </div>
+
+        <div class="bcm-btnrow" style="margin-top:1.2em;">
+          <button type="button" class="bcm-btn settings-save" data-i18n="btnSaveSettings">Save Settings</button>
+        </div>
+        <div class="bcm-status settings-status"></div>
+      </div>
+      </div>
+
+    </div>
+  

@@ -51,7 +51,7 @@ namespace EmbyCast.Plugin.Services
     {
         private readonly IServerApplicationHost _appHost;
         private readonly MessageStore _store;
-        private readonly ILogger _logger;
+        private readonly EmbyCastLogger _logger;
         private readonly Func<PluginConfiguration> _getConfig;
 
         public DeliveryService(
@@ -62,12 +62,12 @@ namespace EmbyCast.Plugin.Services
         {
             _appHost = appHost;
             _store = store;
-            _logger = logManager.GetLogger(nameof(DeliveryService));
+            _logger = new EmbyCastLogger(logManager.GetLogger(nameof(DeliveryService)));
             _getConfig = getConfig;
         }
 
-        /// <summary>Client-name check backing the "Nur an Web-Browser-Sitzungen senden" option
-        /// (currently offered only for Media News - see webOnly below). Emby's own web client
+        /// <summary>Client-name check behind Media News "Send only to web-browser sessions"
+        /// (see webOnly below). Emby's own web client
         /// reports SessionInfo.Client as "Emby Web" regardless of the device it's running on, so
         /// this also matches a narrow mobile-browser window, and does NOT match the separate
         /// desktop "Emby Theater" app - it's an approximation of "has room to show a long
@@ -75,6 +75,10 @@ namespace EmbyCast.Plugin.Services
         internal static bool IsWebSession(SessionInfo session) =>
             session != null && !string.IsNullOrEmpty(session.Client) &&
             session.Client.IndexOf("Web", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        /// <summary>History title of short pop-ups (TimeoutMs &gt; 0), which carry no header of
+        /// their own. Same in every dashboard language, by request.</summary>
+        public const string ToastHistoryTitle = "Toast-Message";
 
         public async Task<SendOutcome> SendAsync(
             string header,
@@ -93,7 +97,15 @@ namespace EmbyCast.Plugin.Services
             // Only used when mode == RecipientMode.Active: if set, only active sessions of these
             // (normalized) user ids are messaged - lets SendPersonalizedAsync send different text
             // to different active users while keeping Active's "never queue offline" semantics.
-            IEnumerable<string> activeUserFilter = null)
+            IEnumerable<string> activeUserFilter = null,
+            // Only used when mode == RecipientMode.Active: session ids that must not get the
+            // message - System Message skips the session that caused the event.
+            IEnumerable<string> excludeSessionIds = null,
+            // false = never keep this message for users without a matching active session (they
+            // are skipped like with RecipientMode.Active), regardless of the Offline delivery
+            // setting. Used by Timer & Server Countdown: a reminder delivered at a later login
+            // ("5 minutes left") would long be out of date.
+            bool keepForOfflineUsers = true)
         {
             var outcome = new SendOutcome();
             try
@@ -106,9 +118,17 @@ namespace EmbyCast.Plugin.Services
                     return outcome;
                 }
 
-                var normalizedHeader = TextFormatting.PrepareForEmbyDisplay(
-                    string.IsNullOrWhiteSpace(header) ? "Announcement" : header);
-                var normalizedText = TextFormatting.PrepareForEmbyDisplay(text);
+                // Any TimeoutMs > 0 makes Emby's clients show a short pop-up ("toast", ~3 s) instead
+                // of a dialog - and a toast never shows a title and keeps no line breaks (verified
+                // in the Emby web client; same behaviour reported for the Android and Android TV
+                // apps). So a toast is sent without a header and with its lines joined, and the
+                // history records it under ToastHistoryTitle - what users actually saw.
+                var isToast = timeoutMs > 0;
+                var bodyText = isToast ? TextFormatting.JoinLinesForToast(text) : text;
+                var displayHeader = string.IsNullOrWhiteSpace(header) ? "Announcement" : header;
+
+                var normalizedHeader = isToast ? "" : TextFormatting.PrepareForEmbyDisplay(displayHeader);
+                var normalizedText = TextFormatting.PrepareForEmbyDisplay(bodyText);
 
                 var config = _getConfig();
 
@@ -118,9 +138,8 @@ namespace EmbyCast.Plugin.Services
                     // Use the same "Announcement" fallback as the actual MessageCommand so the
                     // history/status view never shows a blank header for a message users saw
                     // titled "Announcement".
-                    Header = TextFormatting.NormalizeMessageText(
-                        string.IsNullOrWhiteSpace(header) ? "Announcement" : header),
-                    Text = TextFormatting.NormalizeMessageText(text),
+                    Header = isToast ? ToastHistoryTitle : TextFormatting.NormalizeMessageText(displayHeader),
+                    Text = TextFormatting.NormalizeMessageText(bodyText),
                     RecipientMode = mode.ToString(),
                     ScheduledForUtc = scheduledForUtc,
                     RequestedUserIds = (specificUserIds ?? Enumerable.Empty<string>()).ToList()
@@ -153,8 +172,12 @@ namespace EmbyCast.Plugin.Services
                         var userFilter = activeUserFilter == null
                             ? null
                             : new HashSet<string>(activeUserFilter, StringComparer.OrdinalIgnoreCase);
+                        var excluded = excludeSessionIds == null
+                            ? null
+                            : new HashSet<string>(excludeSessionIds, StringComparer.OrdinalIgnoreCase);
                         var sessions = liveSessions.Where(s => s.IsActive && (!webOnly || IsWebSession(s))
-                            && (userFilter == null || userFilter.Contains(IdNormalization.Normalize(s.UserId) ?? "")));
+                            && (userFilter == null || userFilter.Contains(IdNormalization.Normalize(s.UserId) ?? ""))
+                            && (excluded == null || !excluded.Contains(s.Id ?? "")));
 
                         // Counted per USER (like All/Specific), not per session: a user with two
                         // active sessions is one "delivered", not two. Sessions without a user
@@ -195,8 +218,28 @@ namespace EmbyCast.Plugin.Services
                     // each offline/failed recipient (O(n^2) for an "All users" broadcast).
                     var usernames = BuildUsernameLookup(userManager);
 
+                    // "Specific" ids can point at users that were deleted in Emby since they were
+                    // picked (directly, or as a stale group member). Those must not be treated as
+                    // "offline": their queued message could never be delivered and would show as
+                    // Pending until expiry. Only checked when the user list actually loaded - an
+                    // empty lookup (failed user query) must not turn every recipient into "deleted".
+                    var checkExistence = mode == RecipientMode.Specific && usernames.Count > 0;
+
                     foreach (var userId in targetUserIds)
                     {
+                        if (checkExistence && !usernames.ContainsKey(userId))
+                        {
+                            deliveries.Add(new DeliveryRecord
+                            {
+                                UserId = userId,
+                                Username = userId,
+                                Status = DeliveryStatus.Failed.ToString(),
+                                Note = DeliveryNotes.UserDeleted
+                            });
+                            outcome.Failed++;
+                            continue;
+                        }
+
                         var activeSessionsForUser = liveSessions
                             .Where(s => s.IsActive && string.Equals(IdNormalization.Normalize(s.UserId), userId, StringComparison.OrdinalIgnoreCase))
                             .ToList();
@@ -213,6 +256,11 @@ namespace EmbyCast.Plugin.Services
                         if (matchingSessionsForUser.Count > 0)
                         {
                             await SendToUserSessionsAsync(sessionManager, userId, matchingSessionsForUser, command, deliveries, outcome).ConfigureAwait(false);
+                        }
+                        else if (!keepForOfflineUsers)
+                        {
+                            // skipped - not kept, not counted as failed (same as an inactive user
+                            // with RecipientMode.Active)
                         }
                         else if (config.OfflineDeliveryEnabled)
                         {

@@ -5,17 +5,15 @@ namespace EmbyCast.Plugin.Configuration
 {
     /// <summary>
     /// Persisted plugin settings (serialized to XML by Emby's BasePlugin infrastructure).
-    /// Runtime/mutable data (history, offline queue, scheduled messages, active timer)
-    /// intentionally lives in <see cref="EmbyCast.Plugin.Storage.MessageStore"/>
-    /// instead - a growing list inside the XML config file gets slow to (de)serialize and is
-    /// more prone to corruption than a small dedicated JSON store.
+    /// Runtime data (history, offline queue, scheduled messages, active timer, groups, System
+    /// Messages) lives in <see cref="EmbyCast.Plugin.Storage.MessageStore"/> instead - growing
+    /// lists are slow and fragile in the XML config file.
     /// </summary>
     public class PluginConfiguration : BasePluginConfiguration
     {
         // ---- UI ---------------------------------------------------------
-        /// <summary>Default dashboard language: "en" or "de". The dashboard page itself
-        /// remembers the user's last choice in the browser (localStorage) and falls back
-        /// to this value on first load.</summary>
+        /// <summary>Default dashboard language: "en" or "de". The dashboard remembers the
+        /// admin's last choice in the browser and falls back to this value.</summary>
         public string Language { get; set; } = "en";
 
         // ---- Welcome message ---------------------------------------------
@@ -25,100 +23,83 @@ namespace EmbyCast.Plugin.Configuration
         public int WelcomeMessageTimeoutMs { get; set; } = 0;
 
         // ---- Timer / countdown defaults -----------------------------------
-        /// <summary>Comma separated list of default minute presets, e.g. "60,30,15,5,1".
-        /// Edited from the dashboard; stored here so the admin's preferred presets persist
-        /// across page reloads.</summary>
+        /// <summary>Comma separated default minute presets, e.g. "60,30,15,5,1".</summary>
         public string TimerPresetMinutesCsv { get; set; } = "60,30,15,5,1";
 
         // ---- Media news / "what's new" -------------------------------------
         public string MediaNewsHeader { get; set; } = "What's New";
         public int MediaNewsLookbackDays { get; set; } = 7;
-        /// <summary>Comma separated list of library (virtual folder) ids to include.
+        /// <summary>Comma separated library (virtual folder) ids to include.
         /// Empty = nothing selected = nothing sent (see MediaNewsService.ResolveLibraryPaths).</summary>
         public string MediaNewsLibraryIdsCsv { get; set; } = "";
         public string MediaNewsRecipientMode { get; set; } = "All"; // Active | All | Specific
         public string MediaNewsSpecificUserIdsCsv { get; set; } = "";
-        /// <summary>Comma separated list of selected user-group ids (see Models.UserGroup),
-        /// same idea as MediaNewsSpecificUserIdsCsv above but for groups - resolved to member
-        /// user ids at send time by DeliveryService.SendAsync, never stored expanded here.</summary>
+        /// <summary>Comma separated user-group ids (see Models.UserGroup), resolved to member
+        /// user ids at send time - never stored expanded here.</summary>
         public string MediaNewsSpecificGroupIdsCsv { get; set; } = "";
         public bool MediaNewsSkipWhenEmpty { get; set; } = true;
-        /// <summary>LEGACY: "NewSeries" or "NewEpisodes" - series entries used to be
-        /// a single either/or choice. Superseded by the two independent
-        /// MediaNewsIncludeNewSeries/MediaNewsIncludeNewEpisodes flags below, which let both be
-        /// selected together. Kept only so Plugin's one-time startup migration can read an
-        /// admin's pre-split choice out of an already-saved config file; nothing else reads or
-        /// writes this property anymore - do not use it in new code.
+        /// <summary>LEGACY: the former either/or "NewSeries"/"NewEpisodes" choice, replaced by
+        /// MediaNewsIncludeNewSeries/MediaNewsIncludeNewEpisodes. Only read by the one-time startup
+        /// migration in Plugin - do not use in new code.
         ///
-        /// Default is deliberately null/empty (NOT "NewSeries"): XmlSerializer omits a null
-        /// reference-type property from the saved XML entirely, so once Plugin's one-time
-        /// migration sets this to null and saves, the element is simply absent from then on and
-        /// a fresh load leaves it at this same null initializer - if this defaulted to
-        /// "NewSeries" instead, every reload would reconstruct that non-empty value from the
-        /// initializer (since XmlSerializer only overwrites properties that ARE present in the
-        /// XML), making the migration re-run and re-save on every single plugin load forever
-        /// instead of truly once.</summary>
+        /// The default must stay null: XmlSerializer leaves a null property out of the saved XML,
+        /// so after the migration clears it the element is gone for good. A non-null default would
+        /// be restored from the initializer on every load and re-trigger the migration.</summary>
         public string MediaNewsSeriesMode { get; set; } = null;
-        /// <summary>Include a "Newly added series" section (name + year only, same as before
-        /// the series/episodes split). Independent of MediaNewsIncludeNewEpisodes - both can be true at once, in
-        /// which case the message gets both a "New TV Shows:" and a "New Episodes:" section.</summary>
+        /// <summary>Include a "New TV Shows" section (name + year). Can be combined with
+        /// MediaNewsIncludeNewEpisodes.</summary>
         public bool MediaNewsIncludeNewSeries { get; set; } = true;
-        /// <summary>Include a "New episodes" section, one line per newly added episode formatted
-        /// per MediaNewsEpisodeTemplate. Independent of MediaNewsIncludeNewSeries.</summary>
+        /// <summary>Include a "New Episodes" section, one line per episode formatted per
+        /// MediaNewsEpisodeTemplate.</summary>
         public bool MediaNewsIncludeNewEpisodes { get; set; } = false;
-        /// <summary>Per-episode line format used when MediaNewsIncludeNewEpisodes is true.
-        /// Supports the placeholders "{Series name (year)}" (series name + year, e.g.
-        /// "Futurama (1999)"), "{SxxExx}" (zero-padded season/episode, e.g. "S11E02"), and
-        /// "{Episode title}" (the episode's own title) - admin can arrange/omit them freely.
-        /// These English tokens superseded an older set of German-language tokens;
-        /// MediaNewsService.FormatEpisodeLine still also replaces the old German tokens
-        /// ("{Serienname (Jahr)}"/"{Episodentitel}") so a template saved under the old tokens
-        /// keeps working unchanged.</summary>
+        /// <summary>Per-episode line format. Placeholders: "{Series name (year)}", "{SxxExx}"
+        /// (e.g. "S11E02") and "{Episode title}". MediaNewsService.FormatEpisodeLine also still
+        /// understands the older German placeholders ("{Serienname (Jahr)}"/"{Episodentitel}"),
+        /// so templates saved with them keep working.</summary>
         public string MediaNewsEpisodeTemplate { get; set; } = "{Series name (year)} - {SxxExx} - {Episode title}";
 
         public bool MediaNewsAutoSendEnabled { get; set; } = false;
-        /// <summary>Day/Hour/Minute below are all UTC (MediaNewsAutoScheduler's polling loop runs
-        /// entirely on DateTime.UtcNow) - NOT the admin's local wall-clock time. The dashboard's
-        /// "Weekday"/"Time" fields show/accept the admin's local time and convert to/from UTC in
-        /// config.js (localDayTimeToUtc/utcDayTimeToLocal) before saving/after loading; nothing
-        /// server-side ever needs to know the admin's timezone. Because that conversion uses a
-        /// fixed UTC offset captured at save time, the actual local send time can drift by an
-        /// hour across a DST transition until the admin re-saves - a deliberate, documented
-        /// trade-off given this plugin has no reliable way to resolve an IANA timezone id on
-        /// every Emby Server host/OS it might run on.</summary>
+        /// <summary>Day/Hour/Minute below are UTC (MediaNewsAutoScheduler runs on
+        /// DateTime.UtcNow). The dashboard shows and accepts the admin's local time and converts
+        /// with the UTC offset at save time (app.js localDayTimeToUtc/utcDayTimeToLocal), so the
+        /// local send time can shift by an hour across a DST change until the admin saves again -
+        /// accepted, since there is no reliable way to resolve a timezone id on every Emby host.</summary>
         public DayOfWeek MediaNewsAutoSendDay { get; set; } = DayOfWeek.Friday;
         public int MediaNewsAutoSendHour { get; set; } = 18;
         public int MediaNewsAutoSendMinute { get; set; } = 0;
-        /// <summary>LEGACY - read once at startup to migrate into the store, never written or
-        /// otherwise used anymore. The last-sent timestamp now lives in
-        /// StoreData.MediaNewsLastAutoSentUtc (see its doc comment for why).</summary>
+        /// <summary>LEGACY - only read once at startup to migrate into the store
+        /// (StoreData.MediaNewsLastAutoSentUtc).</summary>
         public DateTime? MediaNewsLastAutoSentUtc { get; set; }
-        /// <summary>"Send only to web-browser sessions" for the recurring weekly auto-send -
-        /// captured from the (shared, see MediaNewsRecipientMode's doc comment for the same
-        /// pattern) "medianews-webonly" checkbox at the moment "Save Auto-send Settings" is
-        /// clicked, same as RecipientMode/LibraryIdsCsv/etc. above. A manual "Send Media News Now"
-        /// never persists this - see Post(SendMediaNews)'s own doc comment for why. Added
-        /// 2026-09-08 per admin request; defaults to false (send to all session types), matching
-        /// every auto-send job saved before this setting existed.</summary>
+        /// <summary>"Send only to web-browser sessions" for the weekly auto-send, captured when
+        /// "Save Auto-send Settings" is clicked. A manual "Send Media News Now" never stores it.
+        /// Defaults to false (all session types).</summary>
         public bool MediaNewsAutoWebOnly { get; set; } = false;
 
+        // ---- Settings tile ----------------------------------------------------
+        /// <summary>What EmbyCast writes to the Emby server log: Nothing, ErrorsOnly,
+        /// ErrorsAndWarnings (default) or Verbose - see EmbyCastLogger.</summary>
+        public string LogLevel { get; set; } = "ErrorsAndWarnings";
+        /// <summary>"Offer beta versions": the update check also considers GitHub pre-releases.
+        /// Off by default.</summary>
+        public bool IncludePreReleases { get; set; } = false;
+
         // ---- Offline delivery -----------------------------------------------
+        /// <summary>Messages for users without an active session (recipients "All users" /
+        /// "Selected users &amp; groups") are kept and delivered at their next login. When off,
+        /// they are recorded as Failed instead. Timer and System Message never keep messages.</summary>
         public bool OfflineDeliveryEnabled { get; set; } = true;
-        /// <summary>"Geplante Reinigung" Feld 1: offline messages older than this (counted from
-        /// OfflineMessageRecord.QueuedAtUtc) are marked DeliveryStatus.Expired and removed from
-        /// the queue automatically, so it doesn't grow forever for users who never log back in.
-        /// Existing installs keep whatever value was already saved (this default only applies to
-        /// a brand-new config file) - see ScheduledMessageBackgroundService.ProcessCleanupAsync.</summary>
+        /// <summary>Scheduled Cleanup: kept offline messages older than this (counted from
+        /// OfflineMessageRecord.QueuedAtUtc) are marked Expired and removed from the queue - see
+        /// ScheduledMessageBackgroundService.ProcessCleanupAsync.</summary>
         public int OfflineMessageMaxAgeDays { get; set; } = 7;
 
         // ---- History ----------------------------------------------------------
         public int HistoryMaxEntries { get; set; } = 300;
-        /// <summary>"Geplante Reinigung" Feld 2: history entries older than this (counted from
-        /// HistoryEntry.CreatedAtUtc) are deleted automatically, for the message types selected
-        /// via the HistoryCleanupInclude* flags below. The dashboard enforces this to always be
-        /// >= OfflineMessageMaxAgeDays (so a history entry is never deleted while its offline
-        /// delivery task is still pending); ProcessCleanupAsync also clamps defensively in case
-        /// that's ever bypassed.</summary>
+        /// <summary>Scheduled Cleanup: history entries older than this (counted from
+        /// HistoryEntry.CreatedAtUtc) are deleted for the types selected by the
+        /// HistoryCleanupInclude* flags. Must be &gt;= OfflineMessageMaxAgeDays so an entry is
+        /// never deleted while its offline delivery is still pending; the dashboard enforces it
+        /// and ProcessCleanupAsync clamps again.</summary>
         public int HistoryMaxAgeDays { get; set; } = 14;
         public bool HistoryCleanupIncludeInstant { get; set; } = true;
         public bool HistoryCleanupIncludeScheduled { get; set; } = true;
@@ -126,24 +107,23 @@ namespace EmbyCast.Plugin.Configuration
         public bool HistoryCleanupIncludeMediaNews { get; set; } = true;
         public bool HistoryCleanupIncludeWelcome { get; set; } = true;
         public bool HistoryCleanupIncludeOffline { get; set; } = true;
-        /// <summary>Master on/off switch for the automatic daily cleanup pass (both the offline
-        /// message expiry above and the history purge above - see
-        /// ScheduledMessageBackgroundService.ProcessCleanup). Deliberately independent of the two
-        /// manual "Delete now" buttons on the dashboard, which always run regardless of this flag,
-        /// and independent of the dashboard's "Save Settings" button, which only persists the two
-        /// day fields and the six type checkboxes above - flipping this toggle saves and applies
-        /// immediately by itself. Defaults to true so upgrading installs keep the exact same
-        /// automatic-cleanup behavior they already had before this toggle existed - it's an
-        /// opt-out, not an opt-in.</summary>
+        public bool HistoryCleanupIncludeSystem { get; set; } = true;
+        /// <summary>On/off switch for the automatic daily cleanup (offline expiry and history
+        /// purge). Saved immediately by the toggle itself; the two "Delete now" buttons work
+        /// regardless. Defaults to true (opt-out).</summary>
         public bool CleanupEnabled { get; set; } = true;
 
         // ---- Dashboard tile homepage ------------------------------------------
-        /// <summary>Comma separated list of tile keys ("updates,instant,scheduled,timer,
-        /// medianews,welcome,history,cleanup") in the admin's preferred display order, set via
-        /// drag &amp; drop on the dashboard's tile homepage. Empty = use the built-in default
-        /// order. On load, config.js drops any unknown keys and appends any missing known keys
-        /// at the end, so a future plugin update that adds a new tile still shows up for
-        /// existing installs without needing a fresh default.</summary>
+        /// <summary>Comma separated tile keys in the admin's display order (drag &amp; drop).
+        /// Empty = built-in order. On load, unknown keys are dropped and missing ones appended,
+        /// so tiles added by a later plugin version still show up.</summary>
         public string TileOrderCsv { get; set; } = "";
+
+        /// <summary>Tile colour scheme of the tile homepage (Settings tile): Default (the
+        /// built-in colourful tiles), Accent (Emby's accent colour), Neutral or Pastel.</summary>
+        public string TileColorScheme { get; set; } = "Default";
+        /// <summary>Single tiles changed on top of the scheme, "key=#rrggbb,key=#rrggbb".
+        /// Empty = every tile uses the scheme colour.</summary>
+        public string TileColorsCsv { get; set; } = "";
     }
 }
