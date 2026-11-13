@@ -21,7 +21,7 @@
          version>, so a new version means new URLs that browsers can't serve from cache.
          (Emby itself caches config.html/config.js keyed by the SERVER version only - that's
          why the shell exists, see Configuration/Web/config.js.) -->
-    <VersionPrefix>1.3.0</VersionPrefix>
+    <VersionPrefix>1.3.1</VersionPrefix>
     <VersionSuffix></VersionSuffix>
     <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
     <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
@@ -32,6 +32,12 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <Nullable>disable</Nullable>
+    <!-- Released DLLs must not contain local build paths (they include the Windows user name):
+         no PDB, so no debug directory pointing at one; reproducible output; and any source path
+         the compiler might still embed is mapped to ".". -->
+    <DebugType>none</DebugType>
+    <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=.</PathMap>
   </PropertyGroup>
 
   <ItemGroup>
