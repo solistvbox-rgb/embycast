@@ -494,12 +494,15 @@ namespace EmbyCast.Plugin.Services
         private static readonly Regex FinalRemainingDe = new Regex(@"noch\s*\{minutes\}\s*Minute\(n\)", RegexOptions.IgnoreCase);
 
         /// <summary>Renders the timer's text template for the moment the countdown hits zero.
-        /// Custom templates that don't match a shipped default simply fall back to substituting
-        /// "0" for {minutes}, same as before. Must stay in sync with renderFinalText() in
-        /// Configuration/Web/app.js (the dashboard preview).</summary>
+        /// An unchanged default text (any dashboard language) gets its matching end text from
+        /// ServerStrings; edited English/German texts are still recognised by the patterns above;
+        /// anything else falls back to substituting "0" for {minutes}. Must stay in sync with
+        /// renderFinalText() in Configuration/Web/app.js (the dashboard preview).</summary>
         internal static string RenderFinalText(string template)
         {
             var text = template ?? "";
+            var final = ServerStrings.FinalTimerText(text);
+            if (final != null) return final;
             if (FinalRemainingEn.IsMatch(text)) return FinalRemainingEn.Replace(text, "finished");
             if (FinalRemainingDe.IsMatch(text)) return FinalRemainingDe.Replace(text, "abgelaufen");
             if (FinalPhraseEn.IsMatch(text)) return FinalPhraseEn.Replace(text, "now");

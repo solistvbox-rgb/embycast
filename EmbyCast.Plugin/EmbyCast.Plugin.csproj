@@ -21,8 +21,8 @@
          version>, so a new version means new URLs that browsers can't serve from cache.
          (Emby itself caches config.html/config.js keyed by the SERVER version only - that's
          why the shell exists, see Configuration/Web/config.js.) -->
-    <VersionPrefix>1.3.1</VersionPrefix>
-    <VersionSuffix></VersionSuffix>
+    <VersionPrefix>1.4.0</VersionPrefix>
+    <VersionSuffix>beta.1</VersionSuffix>
     <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
     <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
     <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
@@ -48,12 +48,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <DashboardAppFile Include="Configuration\Web\app.html;Configuration\Web\app.js" />
+    <!-- strings\*.json: the dashboard languages other than English (built into app.js); the
+         server reads them too, see Services/ServerStrings.cs. -->
+    <DashboardAppFile Include="Configuration\Web\app.html;Configuration\Web\app.js;Configuration\Web\strings\*.json" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- config.html/config.js (the shell) are served by Emby itself and must stay plain.
-         app.html/app.js are served by EmbyCast (EmbyCastApi.EmbeddedClientFile) and are
+         app.html/app.js/strings are served by EmbyCast (EmbyCastApi.EmbeddedClientFile) and are
          embedded gzip-compressed instead - see the EmbedCompressedDashboard target below. -->
     <EmbeddedResource Include="Configuration\Web\**" Exclude="@(DashboardAppFile)" />
     <EmbeddedResource Include="thumb.webp" />

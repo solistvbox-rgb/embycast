@@ -12,8 +12,10 @@ namespace EmbyCast.Plugin.Configuration
     public class PluginConfiguration : BasePluginConfiguration
     {
         // ---- UI ---------------------------------------------------------
-        /// <summary>Default dashboard language: "en" or "de". The dashboard remembers the
-        /// admin's last choice in the browser and falls back to this value.</summary>
+        /// <summary>Language of the texts the weekly Media News job writes ("New Movies:", ...):
+        /// one of the dashboard languages (ServerStrings.Languages), taken from the dashboard
+        /// when the auto-send or welcome settings are saved. The dashboard itself follows Emby's
+        /// display language or the admin's choice stored in the browser.</summary>
         public string Language { get; set; } = "en";
 
         // ---- Welcome message ---------------------------------------------

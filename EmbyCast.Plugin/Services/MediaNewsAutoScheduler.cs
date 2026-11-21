@@ -149,7 +149,7 @@ namespace EmbyCast.Plugin.Services
                 return;
             }
 
-            var noNewsText = config.Language == "de" ? "Keine Neuheiten in dieser Woche." : "No new movies or TV shows this week.";
+            var noNewsText = ServerStrings.Get(config.Language, "serverNoNewsWeek");
 
             var mode = Enum.TryParse<RecipientMode>(config.MediaNewsRecipientMode, out var m) ? m : RecipientMode.All;
             var specificIds = string.IsNullOrWhiteSpace(config.MediaNewsSpecificUserIdsCsv)

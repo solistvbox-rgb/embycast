@@ -54,9 +54,12 @@
       .bcm-topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.4em; flex-wrap:wrap; gap:.6em; }
       .bcm-title { margin:0; font-size:1.6em; }
       .bcm-subtitle { color:var(--text-color-secondary,#aaa); margin:.2em 0 0; font-size:.95em; }
-      .bcm-langswitch { display:flex; gap:.4em; }
-      .bcm-langbtn { padding:.4em .9em; font-size:.85em; border-radius:4px; border:1px solid var(--bcm-border); background:var(--bcm-fill-strong); color:inherit; cursor:pointer; }
-      .bcm-langbtn.active { background:var(--bcm-accent); border-color:var(--bcm-accent); color:var(--bcm-on-accent); }
+      .bcm-langswitch { display:flex; align-items:center; }
+      .bcm-langselect { padding:.4em .6em; font-size:.85em; border-radius:4px; border:1px solid var(--bcm-border); background:var(--bcm-fill-strong); color:inherit; cursor:pointer; max-width:20em; }
+      .bcm-langselect option { color:#000; background:#fff; }
+      /* Hidden for the moment the selected language's strings are loading, so the page doesn't
+         flash up in English first (app.js removes the class, at the latest after a few seconds). */
+      .bcm-lang-loading .bcm-page { visibility:hidden; }
       .bcm-card { border:1px solid var(--bcm-border); border-radius:8px; padding:1.3em 1.4em; margin-bottom:1.6em; background:var(--bcm-fill); box-shadow:0 1px 4px rgba(0,0,0,0.07); }
       .bcm-card h2 { margin:0 0 .2em; font-size:1.15em; display:flex; align-items:center; gap:.5em; }
       .bcm-card .bcm-desc { color:var(--text-color-secondary,#aaa); margin:0 0 1.1em; font-size:.88em; }
@@ -388,8 +391,7 @@
           <p class="bcm-subtitle" data-i18n="pageSubtitle">Send messages to your users, right from the dashboard.</p>
         </div>
         <div class="bcm-langswitch">
-          <button type="button" class="bcm-langbtn" data-lang="en">EN</button>
-          <button type="button" class="bcm-langbtn" data-lang="de">DE</button>
+          <select class="bcm-langselect" aria-label="Language"></select>
         </div>
       </div>
 

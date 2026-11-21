@@ -7,9 +7,11 @@ define(['baseView'], function (BaseView) {
 
     // =====================================================================
     // Translations - every visible string in app.html has a matching
-    // data-i18n (or data-i18n-placeholder) key here, plus a handful of
-    // dynamically generated strings (status/confirm/tooltip messages) used
-    // directly from the JS below via t(key).
+    // data-i18n (or data-i18n-placeholder) key here, plus the strings used
+    // directly from the JS below via t(key). English is built in and is the
+    // fallback for any missing key; the other languages live in
+    // Configuration/Web/strings/strings.<lang>.json and are fetched on demand
+    // (EmbyCast/Client/Strings) - see ensureLanguage().
     // =====================================================================
     var TRANSLATIONS = {
         en: {
@@ -343,336 +345,18 @@ define(['baseView'], function (BaseView) {
             mediaNewsStructureMoviesLine: '- shows Movies added in the last {0} days',
             mediaNewsStructureSeriesLine: '- shows TV Shows added in the last {0} days',
             mediaNewsStructureEpisodesLine: '- shows new Episodes added in the last {0} days',
-            mediaNewsStructureNoLibrary: 'No library selected - nothing would be sent.'
-        },
-        de: {
-            pageTitle: 'EmbyCast',
-            pageSubtitle: 'Nachrichten direkt aus dem Dashboard an eure User senden.',
-
-            updatesTitle: 'Plugin-Updates',
-            updatesDesc: 'Prüft auf GitHub, ob eine neuere Version dieses Plugins verfügbar ist, und installiert sie mit einem Klick.',
-            updatesGithubLink: 'Projektseite:',
-            updatesInstalledVersion: 'Installierte Version: v{0}',
-            instantTitle: 'Sofortnachricht',
-            scheduledTitle: 'Terminierte Nachricht',
-            scheduledDesc: 'Plant eine Nachricht, die automatisch zu einem bestimmten Zeitpunkt gesendet wird.',
-            timerTitle: 'Timer & Server-Countdown',
-            timerDesc: 'Kündigt einen Countdown an (z. B. vor einem Neustart) mit Erinnerungen zu ausgewählten Minutenmarken. Die Session-Liste wird vor jeder Erinnerung neu geprüft, damit User, die während des Countdowns dazukommen, die restlichen Erinnerungen ebenfalls erhalten. User, die nicht online sind, erhalten sie nicht später – Countdown-Nachrichten werden nie aufbewahrt.',
-            mediaNewsTitle: 'Medien-Neuheiten',
-            mediaNewsDesc: 'Kündigt kürzlich hinzugefügte Filme und Serien an.',
-            welcomeTitle: 'Willkommensnachricht',
-            welcomeDesc: 'Wird automatisch beim allerersten Login eines Users gesendet.',
-            groupsTitle: 'User-Gruppen',
-            groupsDesc: 'Mehrere User zu einer benannten Gruppe zusammenfassen, um sie beim Versenden gemeinsam auszuwählen.',
-            historyTitle: 'Status & Historie',
-            settingsTitle: 'Einstellungen',
-            systemTitle: 'System Message',
-            systemDesc: 'Emby-Server-Ereignisse – z. B. Anmeldungen, fehlgeschlagene Anmeldungen, neue Medien, fehlgeschlagene geplante Aufgaben oder Plugin-Updates – als Dialog oder kurze Einblendung auf den aktiven Emby-Sitzungen der ausgewählten Administratoren anzeigen.',
-            btnNewSystemMessage: 'Neue System Message',
-            systemFormNew: 'Neue System Message',
-            systemFormEdit: 'System Message bearbeiten',
-            labelSystemName: 'Name',
-            labelSystemEnabled: 'Aktiv',
-            labelSystemAdmins: 'Administratoren',
-            labelSystemEvents: 'Ereignisse',
-            labelSystemUsers: 'User-Ereignisse beschränken auf',
-            noteSystemUsers: 'Gilt für Ereignisse, die ein User auslöst (Wiedergabe, Anmeldungen, Favoriten, ...). Ereignisse ohne User – Backups, geplante Aufgaben, Plugins – werden immer angezeigt.',
-            systemUsersMeta: 'nur: {0}',
-            systemUsersNone: 'nur: niemand mehr – User-Ereignisse werden nicht angezeigt',
-            msgSystemNeedUser: 'Bitte mindestens einen User oder eine Gruppe auswählen oder „Alle User“ wählen.',
-            btnSystemSave: 'Speichern',
-            btnSystemCancel: 'Abbrechen',
-            btnSystemTest: 'Testen',
-            btnSystemEdit: 'Bearbeiten',
-            btnSystemDelete: 'Löschen',
-            systemListEmpty: 'Noch keine System Message eingerichtet.',
-            systemListError: 'Die System Messages konnten nicht geladen werden.',
-            systemEventsError: 'Die Liste der Emby-Ereignisse konnte nicht geladen werden.',
-            systemEvents: '{0} Ereignis(se)',
-            systemDisabled: 'aus',
-            systemNoAdmins: 'Kein Administrator gefunden.',
-            msgSystemSaved: 'System Message gespeichert.',
-            msgSystemDeleted: 'System Message gelöscht.',
-            msgConfirmDeleteSystem: 'System Message „{0}“ löschen?',
-            msgSystemTestSent: 'Test an {0} Administrator(en) gesendet.',
-            msgSystemTestNobody: 'Test nicht angezeigt – keiner der ausgewählten Administratoren hat gerade eine aktive Emby-Sitzung.',
-            msgSystemNeedName: 'Bitte einen Namen eingeben.',
-            msgSystemNeedEvent: 'Bitte mindestens ein Ereignis auswählen.',
-            msgSystemNeedAdmin: 'Bitte mindestens einen Administrator auswählen.',
-            systemNote: 'Nur Administratoren können System Messages erhalten, und nur auf Sitzungen, die in dem Moment aktiv sind – nichts wird für später aufbewahrt. Über eigene Aktionen (z. B. eigene Wiedergabe oder Anmeldung) wird ein Administrator nicht informiert – ausser bei fehlgeschlagenen Anmeldungen und Sperrungen seines Kontos. Die Texte kommen von Emby selbst. Hinweis: „Scheduled Task Completed“ meldet jede Aufgabe, die Emby ausführt, auch mehrere direkt nach jedem Server-Start. Zugestellte Nachrichten erscheinen in „Status & Historie“ als „System Message“.',
-            settingsDesc: 'Allgemeine Optionen für EmbyCast.',
-            labelTileColors: 'Kachelfarben',
-            tileSchemeDefault: 'Bunt (Standard)',
-            tileSchemeAccent: 'Emby-Akzentfarbe',
-            tileSchemeNeutral: 'Neutral grau',
-            tileSchemePastel: 'Pastell',
-            btnTileColorsReset: 'Alle Kachelfarben zurücksetzen',
-            tileColorReset: 'Zurück zur Schema-Farbe',
-            noteTileColors: 'Wähle ein Schema und ändere bei Bedarf einzelne Kacheln – eine geänderte Kachel behält ihre Farbe auch beim Wechsel des Schemas. „Emby-Akzentfarbe“ folgt Embys Akzentfarben-Einstellung. Wird mit „Einstellungen speichern“ gespeichert und gilt für alle Administratoren. Kacheln ziehen ändert die Reihenfolge – wie auf der Startseite wird sie sofort gespeichert.',
-            labelPreReleases: 'Beta-Versionen anbieten',
-            notePreReleases: 'Der Update-Check in „Plugin Updates“ bietet auch Pre-Releases (Betas) von GitHub an. Betas können Fehler enthalten – nur einschalten, wenn du neue Versionen früh testen willst. Eine neuere stabile Version wird immer angeboten, auch wenn dies ausgeschaltet ist. Wirkt nach dem Speichern.',
-            updatesBetaOn: 'Beta-Versionen werden angeboten (siehe Einstellungen).',
-            msgUpdateAvailableBeta: 'Beta-Update verfügbar: v{0} (aktuell: v{1})',
-            msgConfirmInstallBeta: 'v{0} ist eine Beta-Version (Pre-Release) und kann Fehler enthalten. Trotzdem installieren?',
-            labelLogLevel: 'Protokollierung (Emby-Server-Log)',
-            logLevelNothing: 'Nichts',
-            logLevelErrorsOnly: 'Nur Fehler',
-            logLevelErrorsAndWarnings: 'Fehler und Warnungen (Standard)',
-            logLevelVerbose: 'Ausführlich – alles',
-            noteLogLevel: 'Wie viel EmbyCast ins Emby-Server-Log schreibt. „Ausführlich“ protokolliert zusätzlich jede gesendete Nachricht, Media-News-Abfragen inklusive Bibliothekspfaden und die Bereinigung gelöschter User – gedacht für die Fehlersuche. Wirkt sofort nach dem Speichern. Anfragen, die Emby selbst ablehnt, protokolliert Emby unabhängig von dieser Einstellung.',
-            labelOfflineDelivery: 'Offline-Zustellung',
-            noteOfflineDelivery: 'Nachrichten für User, die gerade nicht online sind (Empfänger „Alle User“ oder „Ausgewählte User & Gruppen“), aufbewahren und beim nächsten Login zustellen. Aufbewahrte Nachrichten werden nach der in der Kachel „Geplante Reinigung“ eingestellten Anzahl Tage gelöscht (Standard: 7) und dann als „Abgelaufen“ erfasst. Ausgeschaltet werden solche Nachrichten in „Status & Historie“ als „Fehlgeschlagen“ erfasst. „Aktive User“, Timer & Server-Countdown und System Message bewahren nie Nachrichten für später auf.',
-            btnSaveSettings: 'Einstellungen speichern',
-            msgSettingsSaved: 'Einstellungen gespeichert.',
-            historyDesc: 'Alle von diesem Plugin gesendeten Nachrichten mit Zustellstatus pro User. Grün = zugestellt, Gelb = ausstehend (offline, wird beim nächsten Login zugestellt), Rot = fehlgeschlagen, Grau = abgelaufen (nicht rechtzeitig zugestellt).',
-
-            labelHeader: 'Titel',
-            labelMessage: 'Nachricht',
-            labelMessageTemplate: 'Nachricht (Platzhalter {minutes} verwendbar)',
-            labelDisplay: 'Anzeige',
-            displayDialog: 'Dialog',
-            displayDialogDesc: 'Bleibt sichtbar, bis der User „Verstanden“ drückt. Titel und Zeilenumbrüche werden angezeigt.',
-            displayToast: 'Kurze Einblendung',
-            displayToastDesc: 'Verschwindet nach etwa 3 Sekunden von selbst. Nur Text – ohne Titel, alles auf einer Zeile.',
-            noteToast: 'Zeilenumbrüche werden als „ · “ angezeigt. Kurz halten – bei den meisten Emby-Apps ist die Einblendung nur etwa 3 Sekunden sichtbar.',
-            labelUserPreview: 'Vorschau beim User',
-            previewGotIt: 'Verstanden',
-            labelRecipients: 'Empfänger',
-            labelDateTime: 'Datum & Uhrzeit',
-            labelTotalMinutes: 'Gesamter Countdown (Minuten)',
-            labelScheduleTimer: 'Später starten (Datum & Uhrzeit wählen)',
-            labelPresets: 'Erinnerungs-Minutenmarken',
-            labelPreview: 'Vorschau',
-            labelPostAction: 'Aktion nach Ablauf des Countdowns',
-            labelLookbackDays: 'Zeitraum (Tage)',
-            labelLibraries: 'Bibliotheken',
-            librariesNote: 'Bibliotheken mit einem Inhaltstyp wie audiobooks, books oder music können bei Medien-Neuheiten nicht verwendet werden und werden hier nicht aufgelistet.',
-            labelSeriesMode: 'Serien-Einträge',
-            labelEpisodeTemplate: 'Episoden-Format',
-            labelAutoSend: 'Automatisch alle 7 Tage senden',
-            labelWeekday: 'Wochentag',
-            labelTime: 'Uhrzeit',
-            labelEnableWelcome: 'Willkommensnachricht aktivieren',
-            noteWelcomeFirstActivation: 'Bestehende User erhalten die Nachricht beim erstmaligen Aktivieren ebenfalls – danach werden die Nachrichten automatisch nur noch an neue User versendet. Textänderungen und das De- oder Aktivieren haben nach der erstmaligen Aktivierung nur noch Einfluss auf neu erstellte User.',
-            btnMarkExistingUsers: 'Bestehende User als bereits begrüsst markieren',
-            noteMarkExistingUsers: 'Überspringt alle aktuell bestehenden User, sodass die Willkommensnachricht nur noch an ab jetzt neu erstellte User geht. Kann jederzeit, auch mehrmals, gefahrlos geklickt werden – bereits markierte User werden dabei einfach übersprungen.',
-            btnUnmarkExistingUsers: 'Begrüsste User zurücksetzen',
-            noteUnmarkExistingUsers: 'Leert die Liste der bereits begrüssten User und schaltet "Willkommensnachricht aktivieren" aus, damit nicht sofort etwas versendet wird. Jeder aktuelle User erhält die Willkommensnachricht dann erneut, sobald ihr sie wieder aktiviert - beim jeweils nächsten Login.',
-
-            placeholderMessage: 'Nachricht hier eingeben...',
-
-            recipientActive: 'Aktive User',
-            recipientAll: 'Alle User',
-            recipientSpecific: 'Ausgewählte User & Gruppen',
-
-            seriesModeNewSeries: 'Neu hinzugefügte Serien',
-            seriesModeNewEpisodes: 'Neue Episoden',
-            episodeTemplateNote: 'Platzhalter anklicken, um ihn an der Cursorposition einzufügen.',
-
-            btnSendNow: 'Sofort senden',
-            btnSchedule: 'Nachricht terminieren',
-            btnSaveScheduleChanges: 'Änderungen speichern',
-            btnEditScheduled: 'Bearbeiten',
-            btnStartTimer: 'Timer starten',
-            btnScheduleTimer: 'Timer terminieren',
-            btnCancelTimer: 'Timer abbrechen',
-            btnPreviewMediaNews: 'Vorschau anzeigen',
-            btnHidePreview: 'Vorschau ausblenden',
-            btnClosePreview: 'Vorschau schließen',
-            btnSendMediaNewsNow: 'Neuheiten jetzt senden',
-            btnSaveAutoSettings: 'Automatik-Einstellungen speichern',
-            btnCheckUpdate: 'Nach Updates suchen',
-            btnInstallUpdate: '⇩ Update installieren',
-            btnShowReleaseNotes: 'Release Notes v{0}',
-            btnHideReleaseNotes: 'Release Notes ausblenden',
-
-            refreshUsers: '↻ User-Liste aktualisieren',
-            manageGroupsLink: '✎ Gruppen verwalten',
-            refreshHistory: '↻ Aktualisieren',
-            clearAllHistory: '✕ Alles verwerfen',
-            linkCancelEdit: '✕ Bearbeitung abbrechen',
-            presetUnit: 'Min.',
-
-            defaultInstantHeader: 'Ankündigung',
-            defaultScheduledHeader: 'Ankündigung',
-            defaultTimerHeader: 'Server-Countdown',
-            defaultTimerText: 'Der Server wird in {minutes} Minute(n) neu gestartet.',
-            defaultTimerTextShutdown: 'Der Server wird in {minutes} Minute(n) heruntergefahren.',
-            defaultTimerTextNone: 'Countdown: noch {minutes} Minute(n)',
-            defaultWelcomeHeader: 'Willkommen!',
-            defaultWelcomeText: 'Willkommen auf unserem Medienserver - wir wünschen dir viel Spaß!',
-            defaultMediaNewsHeader: 'Neuheiten',
-
-            scheduledUpcoming: 'Anstehende terminierte Nachrichten',
-            presetsNote: 'Preset anklicken zum Umschalten, oder oben eine eigene, kommagetrennte Liste eingeben.',
-            postActionNote: 'Server-Aktionen hängen von der jeweiligen Emby-Server-Version ab und sind als experimentell gekennzeichnet - siehe README des Plugins.',
-
-            postActionNone: 'Keine (nur Nachricht)',
-            postActionRestart: 'Server neu starten (experimentell)',
-            postActionShutdown: 'Server herunterfahren (experimentell)',
-
-            dayMonday: 'Montag', dayTuesday: 'Dienstag', dayWednesday: 'Mittwoch', dayThursday: 'Donnerstag',
-            dayFriday: 'Freitag', daySaturday: 'Samstag', daySunday: 'Sonntag',
-
-            nextRunUnknown: 'Nächster geplanter Versand: unbekannt',
-            nextRunLabel: 'Nächster geplanter Versand: {0}',
-            lastSentLabel: 'Zuletzt gesendet: {0}',
-            lastSentNever: 'Zuletzt gesendet: nie',
-            autoCardRecipient: 'wird an {0} versandt',
-            autoCardPeriod: 'Zeitraum letzte {0} Tage',
-            autoCardWebOnly: 'nur Web-Browser-Sitzungen',
-
-            msgSending: 'Wird gesendet…',
-            msgPleaseEnterMessage: 'Bitte eine Nachricht eingeben, bevor gesendet wird.',
-            msgPleaseSelectUsers: 'Bitte mindestens einen User auswählen.',
-            msgPleaseSelectLibrary: 'Bitte zuerst mindestens eine Bibliothek auswählen.',
-            msgPleaseSelectLibraryForAuto: 'Bitte mindestens eine Bibliothek auswählen, bevor der automatische Versand aktiviert wird.',
-            msgPleaseSelectSeriesEntries: 'Die ausgewählte Bibliothek enthält nur Serien, aber weder "Neu hinzugefügte Serien" noch "Neue Episoden" ist angehakt - es würde nie etwas gesendet. Bitte mindestens eine dieser Optionen ankreuzen, oder zusätzlich eine Film-Bibliothek auswählen.',
-            msgPleaseSetDateTime: 'Bitte ein Datum und eine Uhrzeit in der Zukunft wählen.',
-            msgSent: 'Gesendet - {0} zugestellt, {1} ausstehend, {2} fehlgeschlagen.',
-            msgScheduleCreated: 'Nachricht terminiert.',
-            msgScheduleUpdated: 'Nachricht aktualisiert.',
-            msgScheduleNotFound: 'Diese Nachricht existiert nicht mehr (wurde evtl. bereits versendet oder in einem anderen Tab storniert).',
-            msgScheduleCancelled: 'Terminierte Nachricht abgebrochen.',
-            msgConfirmCancelSchedule: 'Diese terminierte Nachricht abbrechen?',
-            msgTimerStarted: 'Timer gestartet.',
-            msgTimerScheduled: 'Timer terminiert.',
-            msgTimerCancelled: 'Timer abgebrochen.',
-            msgTimerNoneActive: 'Kein aktiver Timer.',
-            msgTimerInvalidTotal: 'Der Gesamt-Countdown muss größer als 0 Minuten sein.',
-            msgTimerAlreadyExists: 'Es läuft oder ist bereits ein Timer geplant - zuerst abbrechen.',
-            timerUpcomingTitle: 'Anstehender Timer & Server-Countdown',
-            timerStartsAt: 'Startet um {0}',
-            openOrderTimerScheduled: 'Countdown geplant',
-            msgMediaNewsSending: 'Neuheiten werden zusammengestellt und gesendet…',
-            msgMediaNewsPreviewing: 'Vorschau wird erstellt…',
-            msgMediaNewsPreviewEmpty: 'Keine neuen Medien im gewählten Zeitraum - es würde nichts gesendet.',
-            msgAutoSettingsSaved: 'Automatik-Einstellungen gespeichert.',
-            msgConfirmCancelAutoSend: 'Automatischen Versand ausschalten?',
-            msgAutoSendCancelled: 'Automatischer Versand ausgeschaltet.',
-            msgConfirmSaveAutoConfig: 'Diese Automatik-Einstellungen für Medien-Neuheiten speichern?\n\n{0}',
-            msgPleaseCheckAutoSend: 'Bitte Checkbox auswählen, bevor der automatische Versand aktiviert wird.',
-            valueNoneSelected: 'keine',
-            msgWelcomeSaved: 'Willkommensnachricht-Einstellungen gespeichert.',
-            msgWelcomeDisabled: 'Willkommensnachricht ausgeschaltet.',
-            msgUpdateChecking: 'Wird geprüft…',
-            msgUpdateAvailable: 'Update verfügbar: v{0} (aktuell: v{1})',
-            msgUpdateNoChecksum: 'Update verfügbar: v{0} (aktuell: v{1}), aber für dieses Release wurde keine Prüfsumme veröffentlicht - bitte die DLL manuell installieren.',
-            msgUpToDate: 'Aktuell (v{0})',
-            msgUpdateInstalling: 'Wird heruntergeladen und installiert…',
-            msgLoadFailed: 'Daten konnten nicht geladen werden.',
-            msgNoActiveSessions: 'Aktuell keine aktiven Sessions.',
-            msgNoUsers: 'Keine User gefunden.',
-            msgNoScheduled: 'Keine terminierten Nachrichten.',
-            msgNoHistory: 'Bisher keine Nachrichten gesendet.',
-            msgDismiss: 'Verwerfen',
-            msgConfirmDismissPending: 'Diese Nachricht hat noch ausstehende Zustellungen an offline User. Beim Verwerfen werden diese ausstehenden Zustellungen ebenfalls storniert - sie werden dann nicht mehr zugestellt. Fortfahren?',
-            msgHistoryDismissed: 'Eintrag verworfen.',
-            msgHistoryCleared: 'Historie verworfen.',
-            msgOfflineCancelled: 'Zusätzlich {0} ausstehende Offline-Zustellung(en) storniert.',
-            msgCancel: 'Abbrechen',
-            msgConfirmClearHistory: 'Die gesamte Historie verwerfen? Dies kann nicht rückgängig gemacht werden.',
-            msgNoDeliveries: 'Noch keine Zustellung',
-            msgPendingOffline: 'offline / ausstehend',
-            statusDelivered: 'Zugestellt',
-            statusPending: 'Ausstehend (offline)',
-            statusFailed: 'Fehlgeschlagen',
-            statusExpired: 'Abgelaufen',
-            nowPlayingPrefix: 'Läuft gerade: ',
-            errorPrefix: 'Fehler: ',
-
-            typeInstant: 'Sofort',
-            typeScheduled: 'Terminiert',
-            typeTimer: 'Timer',
-            typeMediaNews: 'Neuheiten',
-            typeWelcome: 'Willkommen',
-            typeOffline: 'Offline',
-            typeSystem: 'System Message',
-            msgNoSupportedLibraries: 'Keine Bibliotheken mit nutzbarem Inhaltstyp (movies/tvshows) gefunden.',
-
-            labelWebOnly: 'Nur an Web-Browser-Sitzungen senden',
-            webOnlyNote: 'Sinnvoll bei langen Media-News-Listen, für die auf Handy- oder TV-Apps oft nicht genug Platz ist. User ohne aktive Web-Browser-Sitzung erhalten die Nachricht nicht sofort: Sie wird aufbewahrt und automatisch zugestellt, sobald sie sich das nächste Mal per Web-Browser anmelden (nur wenn „Offline-Zustellung“ in den Einstellungen eingeschaltet ist). Aufbewahrte Nachrichten werden nach der in der Kachel „Geplante Reinigung“ eingestellten Anzahl Tage gelöscht (Standard: 7) – wer sich bis dahin nicht per Web-Browser angemeldet hat, erhält sie nicht mehr.',
-
-            cleanupTitle: 'Geplante Reinigung',
-            cleanupDesc: 'Räumt nicht zugestellte Nachrichten und alte Verlaufseinträge automatisch auf. Nicht zugestellte (Offline-)Nachrichten gibt es nur, wenn „Offline-Zustellung“ in den Einstellungen eingeschaltet ist.',
-            cleanupStorageFile: 'Gespeicherte Datei: {0}',
-            cleanupStorageHistory: 'History: {0} Eintrag/Einträge (~{1})',
-            cleanupStorageOffline: 'Offline-Warteschlange: {0} Eintrag/Einträge (~{1})',
-            cleanupOfflinePrefix: 'Offline-Nachrichten werden nach',
-            cleanupOfflineSuffix: 'Tag(en) als "Expired" markiert und aus der Warteschlange entfernt.',
-            cleanupHistoryPrefix: 'Alle ausgewählten History-Einträge unten werden nach Ablauf von',
-            cleanupHistorySuffix: 'Tag(en) gelöscht. Scheduled Messages und Media-News-Automatik (wöchentlicher Auftrag) sind davon nicht betroffen.',
-            cleanupMaxEntriesPrefix: 'Die History-Liste wird zusätzlich automatisch auf maximal',
-            cleanupMaxEntriesSuffix: 'Einträge begrenzt - die ältesten werden sofort beim Hinzufügen eines neuen Eintrags entfernt, unabhängig vom Zeitplan oben.',
-            cleanupTypesTitle: 'Betroffene Nachrichtentypen:',
-            btnPurgeOffline: 'Alle nicht zugestellten Nachrichten löschen',
-            btnPurgeHistory: 'History sofort löschen',
-            btnSaveCleanup: 'Einstellungen speichern',
-            msgCleanupSaved: 'Einstellungen für die Reinigung gespeichert.',
-            msgHistoryDaysTooLow: 'Die History-Aufbewahrungsdauer darf nicht kürzer sein als die Offline-Aufbewahrungsdauer ({0} Tag(e)).',
-            msgMaxEntriesOutOfRange: 'Die maximale Anzahl History-Einträge muss zwischen {0} und {1} liegen.',
-            msgConfirmPurgeOffline: 'Alle {0} aktuell nicht zugestellten Nachricht(en) jetzt löschen? Dies kann nicht rückgängig gemacht werden.',
-            msgConfirmPurgeHistory: 'Alle History-Einträge löschen, die auf die angehakten Nachrichtentypen zutreffen? Dies kann nicht rückgängig gemacht werden.',
-            msgPurgedOffline: '{0} nicht zugestellte Nachricht(en) gelöscht.',
-            msgPurgedHistory: '{0} History-Einträge gelöscht.',
-            msgNothingToPurge: 'Nichts zu löschen.',
-            labelEnableCleanup: 'Automatische Reinigung aktiv',
-            noteCleanupToggleIndependent: 'Dieser Schalter schaltet die tägliche automatische Reinigung sofort und für sich alleine ein/aus, unabhängig von "Einstellungen speichern" (das speichert nur die Felder oben). Die beiden "Jetzt löschen"-Buttons oben funktionieren unabhängig von diesem Schalter immer.',
-            msgCleanupEnabled: 'Automatische Reinigung eingeschaltet.',
-            msgCleanupDisabled: 'Automatische Reinigung ausgeschaltet.',
-
-            historyShowMore: 'Mehr anzeigen ▾',
-            historyShowLess: 'Weniger anzeigen ▴',
-
-            recipientToLabel: 'An:',
-            recipientUnknownUser: 'Unbekannter User',
-            recipientMoreLink: '+{0} weitere',
-            recipientShowLess: 'weniger anzeigen',
-
-            backToOverview: 'Übersicht',
-            backToSection: 'Zurück zu {0}',
-            openOrdersTitle: 'Offene Aufträge',
-            openOrdersNone: 'Aktuell nichts Offenes.',
-            openOrderTimerActive: 'Countdown aktiv',
-            openOrderEndsIn: 'endet in {0}',
-            tileArrow: '→ {0}',
-            msgTileOrderSaved: 'Kachel-Reihenfolge gespeichert.',
-
-            labelGroupName: 'Gruppenname',
-            labelGroupMembers: 'Mitglieder',
-            btnNewGroup: '+ Neue Gruppe',
-            btnEditGroup: 'Bearbeiten',
-            btnDeleteGroup: 'Löschen',
-            btnSaveGroup: 'Speichern',
-            userlistGroupsSubtitle: 'Gruppen',
-            userlistUsersSubtitle: 'Einzelne User',
-            groupMemberCountChip: '{0} User',
-            groupMembersLine: '{0} Mitglied(er): {1}',
-            groupDeletedMembers: '{0} gelöschte(r) User - wird beim nächsten Serverstart automatisch entfernt',
-            noteUserDeleted: 'User existiert in Emby nicht mehr',
-            msgGroupEmpty: 'Noch keine Mitglieder.',
-            msgNoGroups: 'Noch keine Gruppen vorhanden.',
-            msgGroupNameRequired: 'Bitte einen Gruppennamen eingeben.',
-            msgGroupSaved: 'Gruppe gespeichert.',
-            msgGroupNotFound: 'Diese Gruppe existiert nicht mehr (evtl. gerade in einem anderen Tab gelöscht).',
-            msgGroupDeleted: 'Gruppe gelöscht.',
-            msgConfirmDeleteGroup: 'Gruppe "{0}" löschen? Eine Scheduled Message oder ein Timer, die/der noch darauf verweist, berücksichtigt sie danach einfach nicht mehr - sonst hat das keine Auswirkungen.',
-            groupFormNewTitle: 'Neue Gruppe',
-            groupFormEditTitle: 'Gruppe bearbeiten: {0}',
-            recipientUnknownGroup: 'Unbekannte Gruppe',
-            msgExistingUsersMarked: '{0} bestehende(r) User markiert - die Willkommensnachricht geht künftig nur noch an ab jetzt neu erstellte User.',
-            noteMarkExistingUsersLastRun: 'Wurde am {0} durchgeführt - {1} bestehende(r) User markiert.',
-            msgConfirmUnmarkExisting: 'Liste der begrüssten User zurücksetzen und "Willkommensnachricht aktivieren" ausschalten? Jeder aktuelle User erhält die Willkommensnachricht erneut, sobald ihr sie wieder aktiviert - nicht sofort, sondern beim jeweils nächsten Login.',
-            msgExistingUsersUnmarked: '{0} User zurückgesetzt - sie erhalten die Willkommensnachricht erneut, sobald ihr "Willkommensnachricht aktivieren" wieder einschaltet.',
-            noteUnmarkExistingUsersLastRun: 'Wurde am {0} durchgeführt - {1} User zurückgesetzt.',
-
-            mediaNewsStructureMovies: 'Neue Filme:',
-            mediaNewsStructureSeries: 'Neue Serien:',
-            mediaNewsStructureEpisodes: 'Neue Episoden:',
-            mediaNewsStructureMoviesLine: '- zeigt Filme, die in den letzten {0} Tagen hinzugefügt wurden',
-            mediaNewsStructureSeriesLine: '- zeigt Serien, die in den letzten {0} Tagen hinzugefügt wurden',
-            mediaNewsStructureEpisodesLine: '- zeigt neue Episoden, die in den letzten {0} Tagen hinzugefügt wurden',
-            mediaNewsStructureNoLibrary: 'Keine Bibliothek ausgewählt - es würde nichts gesendet.'
+            mediaNewsStructureNoLibrary: 'No library selected - nothing would be sent.',
+            langAuto: 'Automatic (Emby language)',
+            // Used by the server too (Media News text, timer end, System Message test) - the
+            // server reads the other languages from the same embedded strings.<lang>.json files.
+            timerFinalRestart: 'The server will restart now.',
+            timerFinalShutdown: 'The server will shut down now.',
+            timerFinalNone: 'Countdown: finished',
+            serverNoLibrary: 'Please select at least one library before the message can be sent.',
+            serverNothingNew: 'No new media in the selected period; nothing sent.',
+            serverNoNewsWeek: 'No new movies or TV shows this week.',
+            systemTestTitle: 'EmbyCast test',
+            systemTestText: 'Test of the System Message "{0}" - this is how it looks.'
         }
     };
 
@@ -696,6 +380,76 @@ define(['baseView'], function (BaseView) {
         return str;
     }
 
+    // Dashboard languages. Native names on purpose - they are shown untranslated so everyone
+    // finds their own language in the list.
+    var LANGUAGES = [
+        { code: 'en', name: 'English' },
+        { code: 'de', name: 'Deutsch' },
+        { code: 'fr', name: 'Français' },
+        { code: 'es', name: 'Español' },
+        { code: 'pt-BR', name: 'Português (Brasil)' },
+        { code: 'it', name: 'Italiano' },
+        { code: 'nl', name: 'Nederlands' },
+        { code: 'pl', name: 'Polski' },
+        { code: 'ru', name: 'Русский' },
+        { code: 'zh-CN', name: '简体中文' }
+    ];
+
+    // Maps any culture code (Emby's display language, the browser's language) to one of
+    // LANGUAGES, or 'en'. Must stay in sync with ServerStrings.Normalize on the server.
+    function normalizeLanguage(code) {
+        var c = String(code || '').toLowerCase().replace('_', '-');
+        if (!c) return 'en';
+        if (c.indexOf('pt') === 0) return 'pt-BR';
+        if (c.indexOf('zh') === 0) return 'zh-CN';
+        var base = c.split('-')[0];
+        for (var i = 0; i < LANGUAGES.length; i++) {
+            if (LANGUAGES[i].code === base) return base;
+        }
+        return 'en';
+    }
+
+    // All loaded dictionaries (English included), e.g. for recognising a default text that was
+    // filled in while the dashboard showed another language.
+    function loadedLanguages() {
+        return Object.keys(TRANSLATIONS);
+    }
+
+    // Fetches strings.<lang>.json once; resolves false if it can't be loaded (the dashboard then
+    // stays English).
+    var languageRequests = {};
+    function ensureLanguage(lang) {
+        if (TRANSLATIONS[lang]) return Promise.resolve(true);
+        if (!languageRequests[lang]) {
+            languageRequests[lang] = ApiClient.ajax({
+                type: 'GET',
+                url: ApiClient.getUrl('EmbyCast/Client/Strings', { Lang: lang }),
+                dataType: 'json'
+            }).then(function (dict) {
+                if (dict && typeof dict === 'object') TRANSLATIONS[lang] = dict;
+                return !!TRANSLATIONS[lang];
+            }, function (err) {
+                console.error('EmbyCast: could not load language ' + lang, err);
+                delete languageRequests[lang];
+                return false;
+            });
+        }
+        return languageRequests[lang];
+    }
+
+    // Emby's own display language (Settings → Display → Display language, which falls back to
+    // the browser language) - read from Emby's globalize module, the same source the Emby UI
+    // uses. Falls back to the browser language if the module can't be loaded.
+    function detectEmbyLanguage() {
+        var fallback = function () { return normalizeLanguage(navigator.language); };
+        if (!(window.Emby && typeof Emby.importModule === 'function')) return Promise.resolve(fallback());
+        return Emby.importModule('./modules/common/globalize.js').then(function (mod) {
+            var globalize = (mod && mod.default) || mod;
+            var locale = globalize && typeof globalize.getCurrentLocale === 'function' ? globalize.getCurrentLocale() : null;
+            return locale ? normalizeLanguage(locale) : fallback();
+        }, fallback);
+    }
+
     // =====================================================================
     // View
     // =====================================================================
@@ -711,12 +465,21 @@ define(['baseView'], function (BaseView) {
 
         // ---------------- language ----------------
 
+        // 'auto' (follow Emby's display language - the default) or one of LANGUAGES. Stored per
+        // browser, like before (older versions stored 'en' or 'de', which still work).
+        var langPreference = 'auto';
+
         function loadLangPreference() {
             try {
                 var stored = window.localStorage.getItem(LANG_STORAGE_KEY);
-                if (stored === 'en' || stored === 'de') return stored;
+                if (stored === 'auto') return 'auto';
+                if (stored && LANGUAGES.some(function (l) { return l.code === stored; })) return stored;
             } catch (e) { /* localStorage may be unavailable */ }
-            return 'en';
+            return 'auto';
+        }
+
+        function resolveLanguage(pref) {
+            return pref === 'auto' ? detectEmbyLanguage() : Promise.resolve(pref);
         }
 
         function saveLangPreference(lang) {
@@ -769,9 +532,7 @@ define(['baseView'], function (BaseView) {
             view.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
                 el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
             });
-            view.querySelectorAll('.bcm-langbtn').forEach(function (btn) {
-                btn.classList.toggle('active', btn.getAttribute('data-lang') === currentLang);
-            });
+            renderLanguageSelect();
         }
 
         // Fields whose *value* (not just their label) is a suggested default that should
@@ -816,7 +577,7 @@ define(['baseView'], function (BaseView) {
         function isTimerTextDefault(value) {
             if (!value || value.trim() === '') return true;
             return TIMER_TEXT_DEFAULT_KEYS.some(function (k) {
-                return value === TRANSLATIONS.en[k] || value === TRANSLATIONS.de[k];
+                return loadedLanguages().some(function (lang) { return value === TRANSLATIONS[lang][k]; });
             });
         }
 
@@ -881,8 +642,8 @@ define(['baseView'], function (BaseView) {
         // never customized it, show it translated into the current UI language instead of the
         // literal stored English text.
         function localizeStoredDefault(value, key) {
-            if (!value || value === TRANSLATIONS.en[key] || value === TRANSLATIONS.de[key]) {
-                return TRANSLATIONS[currentLang][key];
+            if (!value || loadedLanguages().some(function (lang) { return value === TRANSLATIONS[lang][key]; })) {
+                return t(key);
             }
             return value;
         }
@@ -900,11 +661,46 @@ define(['baseView'], function (BaseView) {
             });
         }
 
-        function setLanguage(lang) {
-            var newLang = (lang === 'de') ? 'de' : 'en';
+        // The language dropdown in the top bar: "Automatic" plus every language by its own name.
+        function renderLanguageSelect() {
+            var sel = view.querySelector('.bcm-langselect');
+            if (!sel) return;
+            sel.innerHTML = '';
+            var auto = document.createElement('option');
+            auto.value = 'auto';
+            auto.textContent = t('langAuto');
+            sel.appendChild(auto);
+            LANGUAGES.forEach(function (l) {
+                var opt = document.createElement('option');
+                opt.value = l.code;
+                opt.textContent = l.name;
+                sel.appendChild(opt);
+            });
+            sel.value = langPreference;
+        }
+
+        // Switches to a preference ('auto' or a language code): resolves it, loads the strings
+        // if needed and re-renders. A language that can't be loaded leaves the dashboard as it
+        // is. Returns a promise so init can wait for it.
+        var languageSwitch = 0;
+        function setLanguage(pref, persist) {
+            langPreference = pref;
+            if (persist) saveLangPreference(pref);
+            var ticket = ++languageSwitch;
+            return resolveLanguage(pref).then(function (lang) {
+                return ensureLanguage(lang).then(function (ok) {
+                    // A newer switch started while this one was loading - let that one win.
+                    if (ticket !== languageSwitch) return;
+                    var target = ok ? lang : 'en';
+                    if (target === currentLang) { renderLanguageSelect(); return; }
+                    applyLanguage(target);
+                });
+            });
+        }
+
+        function applyLanguage(newLang) {
             swapDefaultFieldTexts(currentLang, newLang);
             currentLang = newLang;
-            saveLangPreference(currentLang);
             applyStaticTranslations();
             relabelStaticPreviewButtons();
             // Re-render dynamic content that embeds translated strings - including the preset
@@ -928,6 +724,7 @@ define(['baseView'], function (BaseView) {
             renderOpenOrders();
             renderInstalledVersion();
             renderReleaseNotesButton();
+            if (sysmsgLoaded) renderSystemList();
             if (currentSection) {
                 view.querySelector('#bcmDetailTitle').textContent = t(TILE_TITLE_I18N[currentSection]);
                 updateBackLinkLabel();
@@ -935,10 +732,8 @@ define(['baseView'], function (BaseView) {
             }
         }
 
-        view.querySelectorAll('.bcm-langbtn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                setLanguage(btn.getAttribute('data-lang'));
-            });
+        view.querySelector('.bcm-langselect').addEventListener('change', function () {
+            setLanguage(this.value, true);
         });
 
         // ---------------- status helpers ----------------
@@ -1989,9 +1784,15 @@ define(['baseView'], function (BaseView) {
             updateTimerPreview();
         });
 
-        // Mirrors TimerService.RenderFinalText() server-side (see Services/TimerService.cs):
-        // collapses "in {minutes} minute(s)"/"in {minutes} Minute(n)" to "now"/"jetzt" so the
-        // last preview line reads the same way the actual final message will.
+        // Mirrors TimerService.RenderFinalText() server-side (see Services/TimerService.cs). An
+        // unchanged default text (in any language) is replaced by its matching end text, e.g.
+        // "The server will restart now.". Edited English/German texts are still recognised by
+        // the patterns below ("in {minutes} minute(s)" -> "now"), anything else gets 0.
+        var FINAL_TEXT_KEYS = [
+            ['defaultTimerText', 'timerFinalRestart'],
+            ['defaultTimerTextShutdown', 'timerFinalShutdown'],
+            ['defaultTimerTextNone', 'timerFinalNone']
+        ];
         var FINAL_PHRASE_EN = /in\s*\{minutes\}\s*minute\(s\)/i;
         var FINAL_PHRASE_DE = /in\s*\{minutes\}\s*Minute\(n\)/i;
         // "None" defaults: "Countdown: {minutes} minute(s) remaining" / "Countdown: noch
@@ -2000,6 +1801,14 @@ define(['baseView'], function (BaseView) {
         var FINAL_REMAINING_DE = /noch\s*\{minutes\}\s*Minute\(n\)/i;
         function renderFinalText(template) {
             var text = template || '';
+            var langs = loadedLanguages();
+            for (var i = 0; i < langs.length; i++) {
+                var dict = TRANSLATIONS[langs[i]];
+                for (var k = 0; k < FINAL_TEXT_KEYS.length; k++) {
+                    var pair = FINAL_TEXT_KEYS[k];
+                    if (dict[pair[0]] && dict[pair[1]] && text.trim() === dict[pair[0]]) return dict[pair[1]];
+                }
+            }
             if (FINAL_REMAINING_EN.test(text)) return text.replace(FINAL_REMAINING_EN, 'finished');
             if (FINAL_REMAINING_DE.test(text)) return text.replace(FINAL_REMAINING_DE, 'abgelaufen');
             if (FINAL_PHRASE_EN.test(text)) return text.replace(FINAL_PHRASE_EN, 'now');
@@ -2609,6 +2418,8 @@ define(['baseView'], function (BaseView) {
                 SpecificUserIdsCsv: getSelectedUserIds('medianews').join(','),
                 SpecificGroupIdsCsv: getSelectedGroupIds('medianews').join(','),
                 SkipWhenEmpty: true,
+                // The weekly job writes its section labels ("New Movies:", ...) in this language.
+                Language: currentLang,
                 Header: view.querySelector('.medianews-header').value.trim() || t('defaultMediaNewsHeader'),
                 IncludeNewSeries: getIncludeNewSeries(), IncludeNewEpisodes: getIncludeNewEpisodes(), EpisodeTemplate: getEpisodeTemplate(),
                 // Shared with the manual "Send Media News Now" checkbox above (same element,
@@ -2967,7 +2778,7 @@ define(['baseView'], function (BaseView) {
 
         function typeLabel(type) {
             var key = 'type' + type;
-            return TRANSLATIONS[currentLang][key] || type;
+            return (TRANSLATIONS[currentLang] || TRANSLATIONS.en)[key] || type;
         }
 
         function loadHistory() {
@@ -3400,7 +3211,7 @@ define(['baseView'], function (BaseView) {
 
         function testSystemMessage(entry) {
             var statusEl = view.querySelector('.sysmsg-status');
-            ajax('POST', 'EmbyCast/SystemMessages/' + encodeURIComponent(entry.Id) + '/Test', {}).then(function (result) {
+            ajax('POST', 'EmbyCast/SystemMessages/' + encodeURIComponent(entry.Id) + '/Test', { Language: currentLang }).then(function (result) {
                 if (result && result.Error) { showStatus(statusEl, t('errorPrefix') + result.Error, 'err'); return; }
                 var delivered = (result && result.Delivered) || 0;
                 showStatus(statusEl, delivered > 0 ? fmt('msgSystemTestSent', delivered) : t('msgSystemTestNobody'), delivered > 0 ? 'ok' : 'err');
@@ -4089,13 +3900,17 @@ define(['baseView'], function (BaseView) {
 
         function init() {
             applyBackgroundAwareTheme();
-            currentLang = loadLangPreference();
+            // Everything is rendered in English first (the static HTML and its default texts are
+            // English); the chosen language is applied as soon as its strings have loaded, with
+            // the page hidden until then.
+            langPreference = loadLangPreference();
             renderPresetChips();
             syncCustomPresetField();
             applyStaticTranslations();
-            // The static HTML always ships its suggested defaults in English; if the resolved
-            // language is German, translate those default field values right away too.
-            swapDefaultFieldTexts('en', currentLang);
+            view.classList.add('bcm-lang-loading');
+            var revealPage = function () { view.classList.remove('bcm-lang-loading'); };
+            setTimeout(revealPage, 4000);
+            setLanguage(langPreference).then(revealPage, revealPage);
             DISPLAY_PREFIXES.forEach(applyDisplayMode);
             toggleAutoFields();
             // Both static Preview buttons ship with a plain "Preview" placeholder in the HTML;
@@ -4114,15 +3929,6 @@ define(['baseView'], function (BaseView) {
                 tileColorForm = cloneTileColors(savedTileColors);
                 renderTileGrid();
                 renderTileColorSettings();
-                if (!window.localStorage || !window.localStorage.getItem(LANG_STORAGE_KEY)) {
-                    var configLang = config.Language === 'de' ? 'de' : 'en';
-                    if (configLang !== currentLang) {
-                        swapDefaultFieldTexts(currentLang, configLang);
-                        currentLang = configLang;
-                        applyStaticTranslations();
-                        relabelStaticPreviewButtons();
-                    }
-                }
                 if (config.TimerPresetMinutesCsv) {
                     enabledPresets = config.TimerPresetMinutesCsv.split(',')
                         .map(function (s) { return parseInt(s.trim(), 10); })

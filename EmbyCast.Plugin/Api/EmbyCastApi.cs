@@ -235,6 +235,9 @@ namespace EmbyCast.Plugin.Api
         /// <summary>"Send only to web-browser sessions" for the recurring weekly job - see
         /// PluginConfiguration.MediaNewsAutoWebOnly's doc comment.</summary>
         public bool WebOnly { get; set; } = false;
+        /// <summary>Dashboard language at the time of saving - stored as
+        /// PluginConfiguration.Language, the language of the weekly job's texts.</summary>
+        public string Language { get; set; }
     }
 
     [Authenticated(Roles = "Admin")]
@@ -336,6 +339,8 @@ namespace EmbyCast.Plugin.Api
     public class TestSystemMessage : IReturn<object>
     {
         public string Id { get; set; }
+        /// <summary>Dashboard language - the test text is written in it.</summary>
+        public string Language { get; set; }
     }
 
     // ---- Welcome message: save Enabled/Header/Text ------------------------
@@ -350,9 +355,8 @@ namespace EmbyCast.Plugin.Api
         public bool Enabled { get; set; }
         public string Header { get; set; }
         public string Text { get; set; }
-        /// <summary>Also stores PluginConfiguration.Language (the only place the dashboard saves
-        /// it): the weekly Media News auto-send reads it server-side to pick the message
-        /// language.</summary>
+        /// <summary>Also stores PluginConfiguration.Language (as does saving the Media News
+        /// auto-send settings): the weekly Media News job uses it for its texts.</summary>
         public string Language { get; set; }
     }
 
@@ -448,6 +452,14 @@ namespace EmbyCast.Plugin.Api
     public class GetClientScript : IReturn<object>
     {
         public string V { get; set; }
+    }
+
+    [Authenticated(Roles = "Admin")]
+    [Route("/EmbyCast/Client/Strings", "GET", Summary = "Dashboard texts of one language (strings.<lang>.json)")]
+    public class GetClientStrings : IReturn<object>
+    {
+        /// <summary>One of the dashboard languages except "en", which is built into app.js.</summary>
+        public string Lang { get; set; }
     }
 
     public class StatsDto
@@ -820,12 +832,8 @@ namespace EmbyCast.Plugin.Api
                 // actionable mistake), separate from the informational "nothing new" case.
                 result.NoLibrarySelected = request.LibraryIds == null || request.LibraryIds.Count == 0;
                 result.Message = result.NoLibrarySelected
-                    ? (request.Language == "de"
-                        ? "Bitte mindestens eine Bibliothek auswählen, bevor die Nachricht versendet werden kann."
-                        : "Please select at least one library before the message can be sent.")
-                    : (request.Language == "de"
-                        ? "Keine neuen Medien im gewählten Zeitraum - nichts gesendet."
-                        : "No new media in the selected period; nothing sent.");
+                    ? ServerStrings.Get(request.Language, "serverNoLibrary")
+                    : ServerStrings.Get(request.Language, "serverNothingNew");
                 return result;
             }
 
@@ -994,6 +1002,7 @@ namespace EmbyCast.Plugin.Api
                 c.MediaNewsIncludeNewEpisodes = request.IncludeNewEpisodes;
                 c.MediaNewsEpisodeTemplate = request.EpisodeTemplate;
                 c.MediaNewsAutoWebOnly = request.WebOnly;
+                if (!string.IsNullOrEmpty(request.Language)) c.Language = ServerStrings.Normalize(request.Language);
             });
             var config = P.Configuration;
 
@@ -1207,11 +1216,9 @@ namespace EmbyCast.Plugin.Api
             var entry = P.Store.GetSystemNotification(request.Id);
             if (entry == null) return new { Error = "System Message not found." };
 
-            var german = string.Equals(P.Configuration.Language, "de", StringComparison.OrdinalIgnoreCase);
-            var title = german ? "EmbyCast-Test" : "EmbyCast test";
-            var description = german
-                ? $"Test der System Message „{entry.Name}“ - so sieht sie aus."
-                : $"Test of the System Message \"{entry.Name}\" - this is how it looks.";
+            var language = string.IsNullOrEmpty(request.Language) ? P.Configuration.Language : request.Language;
+            var title = ServerStrings.Get(language, "systemTestTitle");
+            var description = ServerStrings.Format(language, "systemTestText", entry.Name);
 
             var outcome = await P.SystemMessages.DeliverAsync(entry, title, "", description, null).ConfigureAwait(false);
             if (outcome.Error != null) return new { Error = outcome.Error };
@@ -1230,7 +1237,7 @@ namespace EmbyCast.Plugin.Api
                 c.WelcomeMessageEnabled = request.Enabled;
                 c.WelcomeMessageHeader = string.IsNullOrWhiteSpace(request.Header) ? "Welcome!" : request.Header.Trim();
                 c.WelcomeMessageText = TruncateText((request.Text ?? "").Trim(), MaxMessageTextLength);
-                if (!string.IsNullOrEmpty(request.Language)) c.Language = request.Language;
+                if (!string.IsNullOrEmpty(request.Language)) c.Language = ServerStrings.Normalize(request.Language);
             });
             var config = P.Configuration;
 
@@ -1484,12 +1491,21 @@ namespace EmbyCast.Plugin.Api
 
         public object Get(GetClientScript request) => EmbeddedClientFile("app.js", "application/javascript; charset=utf-8");
 
-        /// <summary>Serves a dashboard file (app.html / app.js) embedded in the plugin assembly.
+        public object Get(GetClientStrings request)
+        {
+            // Only the known language codes - never a file name taken from the request.
+            var lang = ServerStrings.Normalize(request.Lang);
+            if (lang == "en" || !string.Equals(lang, request.Lang, StringComparison.Ordinal))
+                throw new ArgumentException("Unknown language: " + request.Lang);
+            return EmbeddedClientFile("strings." + lang + ".json", "application/json; charset=utf-8");
+        }
+
+        /// <summary>Serves a dashboard file (app.html / app.js / strings.*.json) embedded in the plugin assembly.
         /// no-store as an extra safeguard - the versioned URL already prevents stale copies, and
         /// the shell requests these only once per page visit.</summary>
         private object EmbeddedClientFile(string fileName, string contentType)
         {
-            var bytes = ClientFileCache.GetOrAdd(fileName, LoadClientFile);
+            var bytes = ClientFileCache.GetOrAdd(fileName, EmbeddedWebFiles.Load);
             var resultFactory = P.ApplicationHost.Resolve<IHttpResultFactory>();
             return resultFactory.GetResult(Request, new System.IO.MemoryStream(bytes, false), contentType, new Dictionary<string, string>
             {
@@ -1501,39 +1517,6 @@ namespace EmbyCast.Plugin.Api
         /// only change with a new DLL, which needs a server restart anyway).</summary>
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> ClientFileCache =
             new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>(StringComparer.Ordinal);
-
-        /// <summary>The build embeds app.html/app.js gzip-compressed as "&lt;name&gt;.gz" (see the
-        /// EmbedCompressedDashboard target in EmbyCast.Plugin.csproj) to keep the DLL small; a
-        /// plain resource is used as fallback if a build ever embeds them uncompressed.</summary>
-        private static byte[] LoadClientFile(string fileName)
-        {
-            var assembly = typeof(Plugin).Assembly;
-            var resourceName = typeof(Plugin).Namespace + ".Configuration.Web." + fileName;
-
-            using (var compressed = assembly.GetManifestResourceStream(resourceName + ".gz"))
-            {
-                if (compressed != null)
-                {
-                    using (var gzip = new System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionMode.Decompress))
-                    using (var buffer = new System.IO.MemoryStream())
-                    {
-                        gzip.CopyTo(buffer);
-                        return buffer.ToArray();
-                    }
-                }
-            }
-
-            using (var plain = assembly.GetManifestResourceStream(resourceName))
-            {
-                if (plain == null)
-                    throw new System.IO.FileNotFoundException("Embedded dashboard resource not found: " + resourceName + "(.gz)");
-                using (var buffer = new System.IO.MemoryStream())
-                {
-                    plain.CopyTo(buffer);
-                    return buffer.ToArray();
-                }
-            }
-        }
 
         public async Task<object> Post(InstallUpdate request)
         {

@@ -1,10 +1,20 @@
 # EmbyCast
 
 An Emby Server plugin that lets admins send instant, scheduled, countdown/timer, media-news,
-welcome and system messages to users and admins from a single dashboard page — with a full
-English/German UI and a built-in self-updater.
+welcome and system messages to users and admins from a single dashboard page — in 10 languages
+and with a built-in self-updater.
 
 <img width="768" height="512" alt="EmbyCast logo" src="assets/logo.png" />
+
+## Preview
+
+<img width="1020" alt="EmbyCast dashboard switching through its 10 languages" src="assets/screenshots/languages.webp" />
+
+*The dashboard homepage, switching through all 10 languages.*
+
+<img width="1000" alt="Typing and sending an Instant Message, which then appears as a dialog in Emby" src="assets/screenshots/instant-message.webp" />
+
+*An Instant Message with live preview - sent to the active users and shown as a dialog in Emby.*
 
 ## Features
 
@@ -40,6 +50,11 @@ English/German UI and a built-in self-updater.
   automatically. Users deleted in Emby are also removed from groups, schedules and recipients.
 - **Settings** — how much EmbyCast writes to the Emby server log, offline delivery on/off, beta
   versions on/off and the tile colours.
+- **10 languages** — English, German, French, Spanish, Portuguese (Brazil), Italian, Dutch,
+  Polish, Russian and Chinese (Simplified). The dashboard follows your Emby display language by
+  default, or pick one from the drop-down at the top right. Texts EmbyCast writes itself (e.g.
+  "New Movies:" in Media News, the end of a countdown) are translated too. See
+  [Translations](#translations).
 - **Self-update** — checks GitHub Releases for a newer version, shows its release notes right in
   the dashboard and installs it with one click, after verifying its checksum and release
   signature. Optionally also offers beta versions (pre-releases); a newer stable version is
@@ -110,7 +125,10 @@ An update that fails either check is refused, never installed.
 
 ### Release steps
 
-1. Bump `<VersionPrefix>` in `EmbyCast.Plugin/EmbyCast.Plugin.csproj`.
+1. Bump `<VersionPrefix>` in `EmbyCast.Plugin/EmbyCast.Plugin.csproj`. For a beta, also set
+   `<VersionSuffix>` (e.g. `beta.1`), tag the release `vX.Y.Z-beta.1` and mark it as
+   **pre-release** on GitHub - it is then only offered to installations with "Offer beta
+   versions" switched on. Leave `<VersionSuffix>` empty for a stable release.
 2. Build: `dotnet build -c Release` (see above).
 3. Sign the built DLL with the private key:
 
@@ -145,6 +163,18 @@ together with its message history, groups, scheduled messages and System Message
 Feedback and bug reports are welcome in the
 [Emby forum thread](https://emby.media/community/topic/149231-plugin-embycast-%E2%80%93-a-multi-message-toolkit-for-your-dashboard/)
 or in the [Issues](../../issues).
+
+## Translations
+
+English is built into `EmbyCast.Plugin/Configuration/Web/app.js`; every other language is one
+file in [`EmbyCast.Plugin/Configuration/Web/strings`](EmbyCast.Plugin/Configuration/Web/strings)
+(`strings.<language>.json`). The dashboard and the server both read these files, and any text
+missing from a file is shown in English.
+
+The languages other than English and German were translated with AI (Claude) and have not been
+reviewed by native speakers yet. Corrections are very welcome - in the forum thread, as an issue
+or as a pull request on the language file. Keep the placeholders (`{0}`, `{1}`, `{minutes}`)
+unchanged. Missing your language? Let me know as well.
 
 ## License
 

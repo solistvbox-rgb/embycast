@@ -388,9 +388,9 @@ namespace EmbyCast.Plugin.Services
         public string ToMessageText(MediaNewsResult digest, string language)
         {
             var sb = new StringBuilder();
-            var moviesLabel = language == "de" ? "Neue Filme:" : "New Movies:";
-            var seriesLabel = language == "de" ? "Neue Serien:" : "New TV Shows:";
-            var episodesLabel = language == "de" ? "Neue Episoden:" : "New Episodes:";
+            var moviesLabel = ServerStrings.Get(language, "mediaNewsStructureMovies");
+            var seriesLabel = ServerStrings.Get(language, "mediaNewsStructureSeries");
+            var episodesLabel = ServerStrings.Get(language, "mediaNewsStructureEpisodes");
 
             if (digest.Movies.Count > 0)
             {
